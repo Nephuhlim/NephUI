@@ -75,7 +75,7 @@ function ResourceBars:GetPowerBar()
     -- TEXT FRAME
     bar.TextFrame = CreateFrame("Frame", nil, bar)
     bar.TextFrame:SetAllPoints(bar)
-    bar.TextFrame:SetFrameLevel(bar.StatusBar:GetFrameLevel() + 2)
+    bar.TextFrame:SetFrameLevel(bar.StatusBar:GetFrameLevel() + 3)
 
     bar.TextValue = bar.TextFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     bar.TextValue:SetPoint("CENTER", bar.TextFrame, "CENTER", NephUI:Scale(cfg.textX or 0), NephUI:Scale(cfg.textY or 0))
@@ -108,7 +108,7 @@ function ResourceBars:UpdatePowerBar()
 
     local bar = self:GetPowerBar()
     local resource = GetPrimaryResource()
-    
+
     if not resource then
         bar:Hide()
         return
@@ -264,7 +264,7 @@ end
 
 function ResourceBars:UpdatePowerBarTicks(bar, resource, max)
     local cfg = NephUI.db.profile.powerBar
-    
+
     -- Hide all ticks first
     for _, tick in ipairs(bar.ticks) do
         tick:Hide()
@@ -286,7 +286,7 @@ function ResourceBars:UpdatePowerBarTicks(bar, resource, max)
             tick:SetColorTexture(0, 0, 0, 1)
             bar.ticks[i] = tick
         end
-        
+
         local x = (i / max) * width
         tick:ClearAllPoints()
         -- x is already in pixels (calculated from bar width), no need to scale
@@ -302,5 +302,5 @@ end
 -- Expose to main addon for backwards compatibility
 NephUI.GetPowerBar = function(self) return ResourceBars:GetPowerBar() end
 NephUI.UpdatePowerBar = function(self) return ResourceBars:UpdatePowerBar() end
-NephUI.UpdatePowerBarTicks = function(self, bar, resource, max) return ResourceBars:UpdatePowerBarTicks(bar, resource, max) end
-
+NephUI.UpdatePowerBarTicks = function(self, bar, resource, max) return ResourceBars:UpdatePowerBarTicks(bar, resource,
+        max) end
