@@ -245,7 +245,33 @@ local function UpdateUnitFrame(self, event, eventUnit, ...)
         self.healthBarBG:SetValue(unitHealthMissing)
 
         -- Set background color (missing health color)
-        local bgR, bgG, bgB, bgA = unpack(DB.Frame.BGColor)
+        -- Use same alpha as foreground for consistent transparency
+        local fgAlpha = (DB.Frame.FGColor and DB.Frame.FGColor[4]) or 1.0
+        local bgR, bgG, bgB, bgA
+        if DB.Frame.ClassColorBackground then
+            -- Use darkened class/reaction color for background - fetch class color independently
+            local darkenFactor = DB.Frame.ClassColorBackgroundBrightness or 0.35
+            local classR, classG, classB = 0.5, 0.5, 0.5
+            
+            -- Try to get class color first
+            local _, class = UnitClass(unit)
+            if class and RAID_CLASS_COLORS[class] then
+                classR, classG, classB = RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b
+            else
+                -- Fallback to reaction color for non-player units
+                local reaction = UnitReaction(unit, "player")
+                if reaction and FACTION_BAR_COLORS[reaction] then
+                    classR, classG, classB = FACTION_BAR_COLORS[reaction].r, FACTION_BAR_COLORS[reaction].g, FACTION_BAR_COLORS[reaction].b
+                end
+            end
+            
+            bgR, bgG, bgB = classR * darkenFactor, classG * darkenFactor, classB * darkenFactor
+            bgA = fgAlpha
+        else
+            local bgColor = DB.Frame.BGColor or {0.5, 0.5, 0.5, 1.0}
+            bgR, bgG, bgB = bgColor[1], bgColor[2], bgColor[3]
+            bgA = fgAlpha
+        end
         self.healthBarBG:SetStatusBarColor(bgR, bgG, bgB, bgA)
     end
     
@@ -455,13 +481,16 @@ function UF:UpdateUnitFrame(unit)
     unitFrame.healthBar:SetStatusBarTexture(self.Media.ForegroundTexture)
 
     -- Update background health bar (missing health)
+    -- Note: For ClassColorBackground, the actual color is applied in the event handler
+    -- since we need the unit's class/reaction color, which requires UnitExists check
     if unitFrame.healthBarBG then
         unitFrame.healthBarBG:ClearAllPoints()
         unitFrame.healthBarBG:SetAllPoints(unitFrame.healthBar)
         unitFrame.healthBarBG:SetStatusBarTexture(self.Media.BackgroundTexture)
 
-        local bgR, bgG, bgB, bgA = unpack(DB.Frame.BGColor)
-        unitFrame.healthBarBG:SetStatusBarColor(bgR, bgG, bgB, bgA)
+        -- Use default BGColor here; ClassColorBackground is applied in event handler
+        local bgColor = DB.Frame.BGColor or {0.1, 0.1, 0.1, 0.8}
+        unitFrame.healthBarBG:SetStatusBarColor(bgColor[1], bgColor[2], bgColor[3], bgColor[4] or 0.8)
     end
     
     -- Ensure media is resolved with latest global font

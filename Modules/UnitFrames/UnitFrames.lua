@@ -111,33 +111,39 @@ end
 -- Fetch unit color based on settings
 function UF.FetchUnitColor(unit, unitDB)
     if not unitDB then return 0.5, 0.5, 0.5, 1.0 end
-
-    local useClassColor = unitDB.ClassColor or unitDB.ClassColour
-    local useReactionColor = unitDB.ReactionColor or unitDB.ReactionColour
+    
+    -- Access Frame sub-table for color settings
+    local frameDB = unitDB.Frame or unitDB
+    
+    local useClassColor = frameDB.ClassColor or frameDB.ClassColour
+    local useReactionColor = frameDB.ReactionColor or frameDB.ReactionColour
+    
+    -- Always get alpha from FGColor settings (for transparency slider)
+    local alpha = (frameDB.FGColor and frameDB.FGColor[4]) or 1.0
 
     if useClassColor and useReactionColor then
         -- Priority: class color first, then reaction
         local _, class = UnitClass(unit)
         if class and RAID_CLASS_COLORS[class] then
-            return RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, 1.0
+            return RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, alpha
         end
     elseif useClassColor then
         local _, class = UnitClass(unit)
         if class and RAID_CLASS_COLORS[class] then
-            return RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, 1.0
+            return RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, alpha
         end
     elseif useReactionColor then
         local reaction = UnitReaction(unit, "player")
         if reaction and FACTION_BAR_COLORS[reaction] then
-            return FACTION_BAR_COLORS[reaction].r, FACTION_BAR_COLORS[reaction].g, FACTION_BAR_COLORS[reaction].b, 1.0
+            return FACTION_BAR_COLORS[reaction].r, FACTION_BAR_COLORS[reaction].g, FACTION_BAR_COLORS[reaction].b, alpha
         end
     end
 
     -- Fallback to custom colors
-    return (unitDB.FGColor and unitDB.FGColor[1]) or 0.5,
-           (unitDB.FGColor and unitDB.FGColor[2]) or 0.5,
-           (unitDB.FGColor and unitDB.FGColor[3]) or 0.5,
-           (unitDB.FGColor and unitDB.FGColor[4]) or 1.0
+    return (frameDB.FGColor and frameDB.FGColor[1]) or 0.5,
+           (frameDB.FGColor and frameDB.FGColor[2]) or 0.5,
+           (frameDB.FGColor and frameDB.FGColor[3]) or 0.5,
+           alpha
 end
 
 -- Fetch name text color
@@ -322,17 +328,50 @@ function UF:ApplyBossPreviewData(unitFrame, bossIndex)
         end
 
         if healthBar.BG then
-            local bgColor = frameDB.BGColor or { 0.1, 0.1, 0.1, 0.8 }
+            local bgR, bgG, bgB, bgA
+            if frameDB.ClassColorBackground then
+                -- Use darkened class/reaction color for background
+                local darkenFactor = frameDB.ClassColorBackgroundBrightness or 0.35
+                bgR, bgG, bgB = healthR * darkenFactor, healthG * darkenFactor, healthB * darkenFactor
+                bgA = frameDB.BGColor and frameDB.BGColor[4] or 0.8
+            else
+                local bgColor = frameDB.BGColor or { 0.1, 0.1, 0.1, 0.8 }
+                bgR, bgG, bgB, bgA = bgColor[1] or 0.1, bgColor[2] or 0.1, bgColor[3] or 0.1, bgColor[4] or 0.8
+            end
             healthBar.BG:SetTexture(self.Media.BackgroundTexture)
-            healthBar.BG:SetVertexColor(bgColor[1] or 0.1, bgColor[2] or 0.1, bgColor[3] or 0.1, bgColor[4] or 0.8)
+            healthBar.BG:SetVertexColor(bgR, bgG, bgB, bgA)
         end
     end
 
     if unitFrame.healthBarBG then
-        local bgColor = frameDB.BGColor or { 0.1, 0.1, 0.1, 0.8 }
+        local bgR, bgG, bgB, bgA
+        if frameDB.ClassColorBackground then
+            -- Use darkened class/reaction color for background
+            local darkenFactor = frameDB.ClassColorBackgroundBrightness or 0.35
+            local classR, classG, classB = 0.5, 0.5, 0.5
+            
+            -- For boss preview, always try class color first, then reaction
+            local classColor = RAID_CLASS_COLORS[fakeData.class]
+            if classColor then
+                classR, classG, classB = classColor.r, classColor.g, classColor.b
+            else
+                -- Fallback to reaction color
+                local reactionColors = generalDB.CustomColors and generalDB.CustomColors.Reaction
+                local reactionColor = reactionColors and reactionColors[fakeData.reaction]
+                if reactionColor then
+                    classR, classG, classB = reactionColor[1], reactionColor[2], reactionColor[3]
+                end
+            end
+            
+            bgR, bgG, bgB = classR * darkenFactor, classG * darkenFactor, classB * darkenFactor
+            bgA = frameDB.BGColor and frameDB.BGColor[4] or 0.8
+        else
+            local bgColor = frameDB.BGColor or { 0.1, 0.1, 0.1, 0.8 }
+            bgR, bgG, bgB, bgA = bgColor[1] or 0.1, bgColor[2] or 0.1, bgColor[3] or 0.1, bgColor[4] or 0.8
+        end
         unitFrame.healthBarBG:SetMinMaxValues(0, fakeData.maxHealth)
         unitFrame.healthBarBG:SetValue(fakeData.missingHealth or (fakeData.maxHealth - fakeData.health))
-        unitFrame.healthBarBG:SetStatusBarColor(bgColor[1] or 0.1, bgColor[2] or 0.1, bgColor[3] or 0.1, bgColor[4] or 0.8)
+        unitFrame.healthBarBG:SetStatusBarColor(bgR, bgG, bgB, bgA)
         unitFrame.healthBarBG:SetFrameLevel((healthBar and healthBar:GetFrameLevel() or unitFrame:GetFrameLevel() or 0) - 1)
         unitFrame.healthBarBG:Show()
     end
