@@ -407,13 +407,35 @@ local function CreateUnitFrameOptions(unit, displayName, order)
                     desc = "Health bar foreground color",
                     order = 12,
                     width = "normal",
-                    hasAlpha = true,
+                    hasAlpha = false,
                     get = function()
                         local c = DB.Frame.FGColor or {26/255, 26/255, 26/255, 1.0}
                         return c[1], c[2], c[3], c[4] or 1
                     end,
                     set = function(_, r, g, b, a)
-                        DB.Frame.FGColor = {r, g, b, a or 1}
+                        -- Preserve existing alpha when setting color
+                        local existingAlpha = DB.Frame.FGColor and DB.Frame.FGColor[4] or 1
+                        DB.Frame.FGColor = {r, g, b, existingAlpha}
+                        UpdateUnitFrame(unit)
+                    end,
+                },
+                fgTransparency = {
+                    type = "range",
+                    name = "Foreground Transparency",
+                    desc = "How transparent the health bar should be. At 0% the frame is invisible when at full health, showing only missing health.",
+                    order = 12.5,
+                    width = "normal",
+                    min = 0,
+                    max = 1.0,
+                    step = 0.05,
+                    isPercent = true,
+                    get = function()
+                        local c = DB.Frame.FGColor or {26/255, 26/255, 26/255, 1.0}
+                        return c[4] or 1.0
+                    end,
+                    set = function(_, val)
+                        local c = DB.Frame.FGColor or {26/255, 26/255, 26/255, 1.0}
+                        DB.Frame.FGColor = {c[1], c[2], c[3], val}
                         UpdateUnitFrame(unit)
                     end,
                 },
@@ -431,13 +453,51 @@ local function CreateUnitFrameOptions(unit, displayName, order)
                         UpdateUnitFrame(unit)
                     end,
                 },
+                useClassColorBackground = {
+                    type = "toggle",
+                    name = "Use Class Color Background",
+                    desc = "Color health bar background by class/reaction color (darkened)",
+                    order = 14,
+                    width = "normal",
+                    get = function()
+                        return DB.Frame.ClassColorBackground or false
+                    end,
+                    set = function(_, val)
+                        DB.Frame.ClassColorBackground = val
+                        UpdateUnitFrame(unit)
+                    end,
+                },
+                classColorBackgroundBrightness = {
+                    type = "range",
+                    name = "Background Brightness",
+                    desc = "How bright the class color background should be (lower = darker)",
+                    order = 14.5,
+                    width = "normal",
+                    min = 0.15,
+                    max = 1.0,
+                    step = 0.05,
+                    isPercent = true,
+                    hidden = function()
+                        return not (DB.Frame.ClassColorBackground or false)
+                    end,
+                    get = function()
+                        return DB.Frame.ClassColorBackgroundBrightness or 0.35
+                    end,
+                    set = function(_, val)
+                        DB.Frame.ClassColorBackgroundBrightness = val
+                        UpdateUnitFrame(unit)
+                    end,
+                },
                 bgColor = {
                     type = "color",
                     name = "Background Color",
                     desc = "Health bar background color",
-                    order = 14,
+                    order = 15,
                     width = "normal",
                     hasAlpha = true,
+                    hidden = function()
+                        return DB.Frame.ClassColorBackground or false
+                    end,
                     get = function()
                         local c = DB.Frame.BGColor or {128/255, 128/255, 128/255, 1.0}
                         return c[1], c[2], c[3], c[4] or 1
