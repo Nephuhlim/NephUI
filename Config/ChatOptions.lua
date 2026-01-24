@@ -26,6 +26,20 @@ local function CreateChatOptions()
                     end
                 end,
             },
+            hideBorder = {
+                type = "toggle",
+                name = "Hide Chat Border",
+                desc = "Hide the border around chat frames",
+                width = "full",
+                order = 2.5,
+                get = function() return NephUI.db.profile.chat.hideBorder end,
+                set = function(_, val)
+                    NephUI.db.profile.chat.hideBorder = val
+                    if NephUI.Chat and NephUI.Chat.UpdateBorders then
+                        NephUI.Chat:UpdateBorders()
+                    end
+                end,
+            },
             spacer1 = {
                 type = "description",
                 name = " ",

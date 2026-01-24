@@ -52,6 +52,12 @@ local function CreateBorder(frame)
     border:SetBackdropBorderColor(0, 0, 0, 1)
     border:SetFrameLevel(frame:GetFrameLevel() + 1)
     
+    -- Check if border should be hidden
+    local cfg = NephUI.db.profile.chat
+    if cfg and cfg.hideBorder then
+        border:Hide()
+    end
+    
     frame.__nephuiBorder = border
     return border
 end
@@ -813,6 +819,56 @@ function Chat:DisableChatFrameClamping()
                         self:SetClampedToScreen(false)
                     end
                 end)
+            end
+        end
+    end
+end
+
+-- Function to update border visibility for all chat frames
+function Chat:UpdateBorders()
+    local cfg = NephUI.db.profile.chat
+    if not cfg then return end
+    
+    local hideBorder = cfg.hideBorder
+    local numChatWindows = NUM_CHAT_WINDOWS or 10
+    
+    for i = 1, numChatWindows do
+        local chatFrame = _G["ChatFrame" .. i]
+        if chatFrame then
+            -- Update main frame border
+            if chatFrame.__nephuiBorder then
+                if hideBorder then
+                    chatFrame.__nephuiBorder:Hide()
+                else
+                    chatFrame.__nephuiBorder:Show()
+                end
+            end
+            
+            -- Update editbox border
+            local editBox = chatFrame.editBox
+            if not editBox and chatFrame.GetName then
+                local frameName = chatFrame:GetName()
+                if frameName then
+                    editBox = _G[frameName .. "EditBox"]
+                end
+            end
+            if editBox and editBox.__nephuiBorder then
+                if hideBorder then
+                    editBox.__nephuiBorder:Hide()
+                else
+                    editBox.__nephuiBorder:Show()
+                end
+            end
+        end
+    end
+    
+    -- Also handle DEFAULT_CHAT_FRAME
+    if DEFAULT_CHAT_FRAME then
+        if DEFAULT_CHAT_FRAME.__nephuiBorder then
+            if hideBorder then
+                DEFAULT_CHAT_FRAME.__nephuiBorder:Hide()
+            else
+                DEFAULT_CHAT_FRAME.__nephuiBorder:Show()
             end
         end
     end
