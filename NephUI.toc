@@ -37,6 +37,7 @@ libs\AceSerializer-3.0\AceSerializer-3.0.xml
 # Localization files
 Locales\Locale.lua
 Locales\enUS.lua
+Locales\zhCN.lua
 
 # Core addon files
 Core\Main.lua
