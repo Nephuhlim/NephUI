@@ -1,0 +1,4 @@
+This software and all associated files are the exclusive property of the author.
+No permission is granted to copy, modify, distribute, sublicense, or otherwise use any part of this addon, except for personal in-game use as intended by the World of Warcraft client.
+
+You may not redistribute this addon or any of its code on any platform without explicit written permission from the author.
