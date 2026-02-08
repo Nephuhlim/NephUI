@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 local NephUI = ns.Addon
-local L = ns.L or LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true)
+local L = ns.L or LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true) or {}
 
 local importBuffer = ""
 local newProfileNameBuffer = ""
@@ -9,7 +9,7 @@ local function CreateProfileOptions()
     return {
         type = "group",
         name = L["Import / Export"] or "Import / Export",
-        order = 99,
+        order = 13,
         args = {
             desc = {
                 type  = "description",

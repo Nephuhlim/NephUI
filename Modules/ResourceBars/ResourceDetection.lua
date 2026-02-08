@@ -45,11 +45,81 @@ local tickedPowerTypes = {
     [Enum.PowerType.Runes] = true,
     [Enum.PowerType.SoulShards] = true,
     ["MAELSTROM_WEAPON"] = true,
+    ["SOUL"] = true, -- Vengeance Demon Hunter only (checked dynamically)
 }
 
 local fragmentedPowerTypes = {
     [Enum.PowerType.Runes] = true,
     [Enum.PowerType.Essence] = true,
+}
+
+local classSpecResources = {
+    DEATHKNIGHT = {
+        [250] = { primary = { Enum.PowerType.RunicPower }, secondary = { Enum.PowerType.Runes } }, -- Blood
+        [251] = { primary = { Enum.PowerType.RunicPower }, secondary = { Enum.PowerType.Runes } }, -- Frost
+        [252] = { primary = { Enum.PowerType.RunicPower }, secondary = { Enum.PowerType.Runes } }, -- Unholy
+    },
+    DEMONHUNTER = {
+        [577]  = { primary = { Enum.PowerType.Fury }, secondary = {} }, -- Havoc
+        [581]  = { primary = { Enum.PowerType.Fury }, secondary = { "SOUL" } }, -- Vengeance
+        [1480] = { primary = { Enum.PowerType.Fury }, secondary = { "SOUL" } }, -- Devourer (Aldrachi Reaver)
+    },
+    DRUID = {
+        [102] = { primary = { Enum.PowerType.LunarPower }, secondary = { Enum.PowerType.Mana } }, -- Balance
+        [103] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Feral
+        [104] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Guardian
+        [105] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.ComboPoints } }, -- Restoration (Cat form)
+    },
+    EVOKER = {
+        [1467] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.Essence } }, -- Devastation
+        [1468] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.Essence } }, -- Preservation
+        [1473] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.Essence } }, -- Augmentation
+    },
+    HUNTER = {
+        [253] = { primary = { Enum.PowerType.Focus }, secondary = {} }, -- Beast Mastery
+        [254] = { primary = { Enum.PowerType.Focus }, secondary = {} }, -- Marksmanship
+        [255] = { primary = { Enum.PowerType.Focus }, secondary = {} }, -- Survival
+    },
+    MAGE = {
+        [62] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.ArcaneCharges } }, -- Arcane
+        [63] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Fire
+        [64] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Frost
+    },
+    MONK = {
+        [268] = { primary = { Enum.PowerType.Energy }, secondary = { "STAGGER" } }, -- Brewmaster
+        [269] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.Chi } }, -- Windwalker
+        [270] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Mistweaver
+    },
+    PALADIN = {
+        [65] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.HolyPower } }, -- Holy
+        [66] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.HolyPower } }, -- Protection
+        [70] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.HolyPower } }, -- Retribution
+    },
+    PRIEST = {
+        [256] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Discipline
+        [257] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Holy
+        [258] = { primary = { Enum.PowerType.Insanity }, secondary = { Enum.PowerType.Mana } }, -- Shadow
+    },
+    ROGUE = {
+        [259] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Assassination
+        [260] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Outlaw
+        [261] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Subtlety
+    },
+    SHAMAN = {
+        [262] = { primary = { Enum.PowerType.Maelstrom }, secondary = { Enum.PowerType.Mana } }, -- Elemental
+        [263] = { primary = { Enum.PowerType.Mana }, secondary = { "MAELSTROM_WEAPON" } }, -- Enhancement
+        [264] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Restoration
+    },
+    WARLOCK = {
+        [265] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.SoulShards } }, -- Affliction
+        [266] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.SoulShards } }, -- Demonology
+        [267] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.SoulShards } }, -- Destruction
+    },
+    WARRIOR = {
+        [71] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Arms
+        [72] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Fury
+        [73] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Protection
+    },
 }
 
 -- Export tables for use in other ResourceBars files
@@ -58,6 +128,7 @@ NephUI.ResourceBars.tickedPowerTypes = tickedPowerTypes
 NephUI.ResourceBars.fragmentedPowerTypes = fragmentedPowerTypes
 NephUI.ResourceBars.HAS_UNIT_POWER_PERCENT = HAS_UNIT_POWER_PERCENT
 NephUI.ResourceBars.buildVersion = buildVersion
+NephUI.ResourceBars.classSpecResources = classSpecResources
 
 -- RESOURCE DETECTION
 
@@ -118,7 +189,8 @@ local function GetSecondaryResource()
     local secondaryResources = {
         ["DEATHKNIGHT"] = Enum.PowerType.Runes,
         ["DEMONHUNTER"] = {
-            [1480] = "SOUL", -- Aldrachi Reaver
+            [581] = "SOUL", -- Vengeance
+            [1480] = "SOUL", -- Devourer (Aldrachi Reaver)
         },
         ["DRUID"]       = {
             [1]    = Enum.PowerType.ComboPoints, -- Cat
@@ -160,6 +232,107 @@ local function GetSecondaryResource()
     else 
         return secondaryResources[playerClass]
     end
+end
+
+local function GetDefaultBarAssignment(class, specID, resource)
+    local classData = classSpecResources[class]
+    if classData then
+        local specData = classData[specID]
+        if specData then
+            if specData.primary then
+                for _, powerType in ipairs(specData.primary) do
+                    if powerType == resource then
+                        return "primary"
+                    end
+                end
+            end
+            if specData.secondary then
+                for _, powerType in ipairs(specData.secondary) do
+                    if powerType == resource then
+                        return "secondary"
+                    end
+                end
+            end
+        end
+    end
+    return "primary"
+end
+
+local function GetResourceKey(resource)
+    if type(resource) == "string" then
+        return resource
+    end
+    if type(resource) == "number" then
+        return tostring(resource)
+    end
+    return tostring(resource)
+end
+
+local function GetResourceBarAssignment(class, specID, resource)
+    local profile = NephUI.db and NephUI.db.profile
+    local assignments = profile and profile.resourceBarAssignments
+    local classAssignments = assignments and assignments[class]
+    local specAssignments = classAssignments and classAssignments[specID]
+    local resourceKey = GetResourceKey(resource)
+    local assigned = specAssignments and (specAssignments[resourceKey] or specAssignments[resource])
+    if assigned and specAssignments and specAssignments[resource] and not specAssignments[resourceKey] then
+        specAssignments[resourceKey] = specAssignments[resource]
+        specAssignments[resource] = nil
+    end
+    if assigned == "primary" or assigned == "secondary" or assigned == "hide" then
+        return assigned
+    end
+    return GetDefaultBarAssignment(class, specID, resource)
+end
+
+local function IsSecondaryResourceForSpec(class, specID, resource)
+    local classData = classSpecResources[class]
+    if not classData then
+        return false
+    end
+    local specData = classData[specID]
+    if not specData or not specData.secondary then
+        return false
+    end
+    for _, powerType in ipairs(specData.secondary) do
+        if powerType == resource then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetAssignedResources()
+    local primaryResource = GetPrimaryResource()
+    local secondaryResource = GetSecondaryResource()
+    local _, class = UnitClass("player")
+    local spec = GetSpecialization()
+    local specID = spec and GetSpecializationInfo(spec)
+
+    if not class or not specID then
+        return primaryResource, secondaryResource
+    end
+
+    local primaryAssignment = primaryResource and GetResourceBarAssignment(class, specID, primaryResource)
+    local secondaryAssignment = secondaryResource and GetResourceBarAssignment(class, specID, secondaryResource)
+
+    local bar1Resource
+    local bar2Resource
+
+    if primaryResource and primaryAssignment == "primary" then
+        bar1Resource = primaryResource
+    end
+    if secondaryResource and secondaryAssignment == "primary" and not bar1Resource then
+        bar1Resource = secondaryResource
+    end
+    if primaryResource and primaryAssignment == "secondary" then
+        bar2Resource = primaryResource
+    end
+    if secondaryResource and secondaryAssignment == "secondary" and not bar2Resource then
+        bar2Resource = secondaryResource
+    end
+
+    return bar1Resource, bar2Resource
 end
 
 local function GetChargedPowerPoints(resource)
@@ -297,14 +470,25 @@ local function GetSecondaryResourceValue(resource, cfg)
     end
 
     if resource == "SOUL" then
-        -- DH souls – get from default Blizzard bar
-        local soulBar = _G["DemonHunterSoulFragmentsBar"]
-        if not soulBar then return nil, nil, nil, nil, nil end
-
-        local current = soulBar:GetValue()
-        local _, max = soulBar:GetMinMaxValues()
-
-        return max, max, current, current, "number"
+        -- DH souls – get from API instead of hooking Blizzard bar
+        local spec = GetSpecialization()
+        local specID = GetSpecializationInfo(spec)
+        
+        if specID == 581 then
+            -- Vengeance: use Soul Cleave spell cast count
+            local current = C_Spell.GetSpellCastCount(228477) or 0 -- Soul Cleave
+            local max = 6
+            return max, max, current, current, "number"
+        elseif specID == 1480 then
+            -- Devourer: use aura applications (Soul Fragments / Collapsing Star)
+            local auraData = C_UnitAuras.GetPlayerAuraBySpellID(1225789) or C_UnitAuras.GetPlayerAuraBySpellID(1227702)
+            local current = auraData and auraData.applications or 0
+            local max = C_SpellBook.IsSpellKnown(1247534) and 35 or 50 -- Soul Glutton talent
+            return max, max, current, current, "number"
+        else
+            -- Fallback (shouldn't happen, but just in case)
+            return nil, nil, nil, nil, nil
+        end
     end
 
     if resource == "MAELSTROM_WEAPON" then
@@ -366,6 +550,10 @@ end
 -- Export functions
 NephUI.ResourceBars.GetPrimaryResource = GetPrimaryResource
 NephUI.ResourceBars.GetSecondaryResource = GetSecondaryResource
+NephUI.ResourceBars.GetResourceBarAssignment = GetResourceBarAssignment
+NephUI.ResourceBars.GetAssignedResources = GetAssignedResources
+NephUI.ResourceBars.IsSecondaryResourceForSpec = IsSecondaryResourceForSpec
+NephUI.ResourceBars.GetDefaultBarAssignment = GetDefaultBarAssignment
 NephUI.ResourceBars.GetResourceColor = GetResourceColor
 NephUI.ResourceBars.GetPrimaryResourceValue = GetPrimaryResourceValue
 NephUI.ResourceBars.GetSecondaryResourceValue = GetSecondaryResourceValue

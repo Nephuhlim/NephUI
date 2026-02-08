@@ -14,7 +14,7 @@ local function CreateCastBarOptions()
     return {
         type = "group",
         name = "Cast Bars",
-        order = 5,
+        order = 7,
         childGroups = "tab",
         args = {
             player = {
@@ -232,10 +232,63 @@ local function CreateCastBarOptions()
                         name = "Text Size",
                         order = 25,
                         width = "normal",
-                        min = 6, max = 20, step = 1,
+                        min = 6, max = 40, step = 1,
                         get = function() return NephUI.db.profile.castBar.textSize end,
                         set = function(_, val)
                             NephUI.db.profile.castBar.textSize = val
+                            NephUI:UpdateCastBarLayout()
+                        end,
+                    },
+                    textPositionHeader = {
+                        type = "header",
+                        name = "Text Position",
+                        order = 25.1,
+                    },
+                    nameOffsetX = {
+                        type = "range",
+                        name = "Name Text Offset X",
+                        order = 25.2,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.castBar.nameOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.castBar.nameOffsetX = val
+                            NephUI:UpdateCastBarLayout()
+                        end,
+                    },
+                    nameOffsetY = {
+                        type = "range",
+                        name = "Name Text Offset Y",
+                        order = 25.3,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.castBar.nameOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.castBar.nameOffsetY = val
+                            NephUI:UpdateCastBarLayout()
+                        end,
+                    },
+                    timeOffsetX = {
+                        type = "range",
+                        name = "Time Text Offset X",
+                        order = 25.4,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.castBar.timeOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.castBar.timeOffsetX = val
+                            NephUI:UpdateCastBarLayout()
+                        end,
+                    },
+                    timeOffsetY = {
+                        type = "range",
+                        name = "Time Text Offset Y",
+                        order = 25.5,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.castBar.timeOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.castBar.timeOffsetY = val
                             NephUI:UpdateCastBarLayout()
                         end,
                     },
@@ -669,10 +722,63 @@ local function CreateCastBarOptions()
                         name = "Text Size",
                         order = 26,
                         width = "normal",
-                        min = 6, max = 20, step = 1,
+                        min = 6, max = 40, step = 1,
                         get = function() return NephUI.db.profile.targetCastBar.textSize end,
                         set = function(_, val)
                             NephUI.db.profile.targetCastBar.textSize = val
+                            NephUI:UpdateTargetCastBarLayout()
+                        end,
+                    },
+                    textPositionHeader = {
+                        type = "header",
+                        name = "Text Position",
+                        order = 26.1,
+                    },
+                    nameOffsetX = {
+                        type = "range",
+                        name = "Name Text Offset X",
+                        order = 26.2,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.targetCastBar.nameOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.targetCastBar.nameOffsetX = val
+                            NephUI:UpdateTargetCastBarLayout()
+                        end,
+                    },
+                    nameOffsetY = {
+                        type = "range",
+                        name = "Name Text Offset Y",
+                        order = 26.3,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.targetCastBar.nameOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.targetCastBar.nameOffsetY = val
+                            NephUI:UpdateTargetCastBarLayout()
+                        end,
+                    },
+                    timeOffsetX = {
+                        type = "range",
+                        name = "Time Text Offset X",
+                        order = 26.4,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.targetCastBar.timeOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.targetCastBar.timeOffsetX = val
+                            NephUI:UpdateTargetCastBarLayout()
+                        end,
+                    },
+                    timeOffsetY = {
+                        type = "range",
+                        name = "Time Text Offset Y",
+                        order = 26.5,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.targetCastBar.timeOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.targetCastBar.timeOffsetY = val
                             NephUI:UpdateTargetCastBarLayout()
                         end,
                     },
@@ -946,10 +1052,63 @@ local function CreateCastBarOptions()
                         name = "Text Size",
                         order = 26,
                         width = "normal",
-                        min = 6, max = 20, step = 1,
+                        min = 6, max = 40, step = 1,
                         get = function() return NephUI.db.profile.focusCastBar.textSize end,
                         set = function(_, val)
                             NephUI.db.profile.focusCastBar.textSize = val
+                            NephUI:UpdateFocusCastBarLayout()
+                        end,
+                    },
+                    textPositionHeader = {
+                        type = "header",
+                        name = "Text Position",
+                        order = 26.1,
+                    },
+                    nameOffsetX = {
+                        type = "range",
+                        name = "Name Text Offset X",
+                        order = 26.2,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.focusCastBar.nameOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.focusCastBar.nameOffsetX = val
+                            NephUI:UpdateFocusCastBarLayout()
+                        end,
+                    },
+                    nameOffsetY = {
+                        type = "range",
+                        name = "Name Text Offset Y",
+                        order = 26.3,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.focusCastBar.nameOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.focusCastBar.nameOffsetY = val
+                            NephUI:UpdateFocusCastBarLayout()
+                        end,
+                    },
+                    timeOffsetX = {
+                        type = "range",
+                        name = "Time Text Offset X",
+                        order = 26.4,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.focusCastBar.timeOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.focusCastBar.timeOffsetX = val
+                            NephUI:UpdateFocusCastBarLayout()
+                        end,
+                    },
+                    timeOffsetY = {
+                        type = "range",
+                        name = "Time Text Offset Y",
+                        order = 26.5,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.focusCastBar.timeOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.focusCastBar.timeOffsetY = val
                             NephUI:UpdateFocusCastBarLayout()
                         end,
                     },
@@ -1173,6 +1332,59 @@ local function CreateCastBarOptions()
                         end,
                         set = function(_, r, g, b, a)
                             NephUI.db.profile.bossCastBar.bgColor = { r, g, b, a }
+                            NephUI:UpdateAllBossCastBarLayouts()
+                        end,
+                    },
+                    textPositionHeader = {
+                        type = "header",
+                        name = "Text Position",
+                        order = 26,
+                    },
+                    nameOffsetX = {
+                        type = "range",
+                        name = "Name Text Offset X",
+                        order = 26.1,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.bossCastBar.nameOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.bossCastBar.nameOffsetX = val
+                            NephUI:UpdateAllBossCastBarLayouts()
+                        end,
+                    },
+                    nameOffsetY = {
+                        type = "range",
+                        name = "Name Text Offset Y",
+                        order = 26.2,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.bossCastBar.nameOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.bossCastBar.nameOffsetY = val
+                            NephUI:UpdateAllBossCastBarLayouts()
+                        end,
+                    },
+                    timeOffsetX = {
+                        type = "range",
+                        name = "Time Text Offset X",
+                        order = 26.3,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.bossCastBar.timeOffsetX or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.bossCastBar.timeOffsetX = val
+                            NephUI:UpdateAllBossCastBarLayouts()
+                        end,
+                    },
+                    timeOffsetY = {
+                        type = "range",
+                        name = "Time Text Offset Y",
+                        order = 26.4,
+                        width = "normal",
+                        min = -100, max = 100, step = 1,
+                        get = function() return NephUI.db.profile.bossCastBar.timeOffsetY or 0 end,
+                        set = function(_, val)
+                            NephUI.db.profile.bossCastBar.timeOffsetY = val
                             NephUI:UpdateAllBossCastBarLayouts()
                         end,
                     },

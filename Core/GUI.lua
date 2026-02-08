@@ -1206,6 +1206,69 @@ local function RenderOptions(contentFrame, options, path, parentFrame)
             end
         end
 
+        -- Create a horizontal scroll frame for tabs to allow drag scrolling
+        local tabScrollFrame = CreateFrame("ScrollFrame", nil, subTabContainer)
+        tabScrollFrame:SetPoint("TOPLEFT", subTabContainer, "TOPLEFT", 4, -2)
+        tabScrollFrame:SetPoint("BOTTOMRIGHT", subTabContainer, "BOTTOMRIGHT", -4, 2)
+        tabScrollFrame:EnableMouse(true)
+        tabScrollFrame:EnableMouseWheel(true)
+        tabScrollFrame:SetClipsChildren(true)
+
+        local tabScrollChild = CreateFrame("Frame", nil, tabScrollFrame)
+        tabScrollChild:SetHeight(subTabContainer:GetHeight())
+        tabScrollChild:SetWidth(subTabContainer:GetWidth() or 1)
+        tabScrollFrame:SetScrollChild(tabScrollChild)
+
+        local function UpdateTabScrollBounds()
+            local frameWidth = tabScrollFrame:GetWidth() or 0
+            local childWidth = tabScrollChild:GetWidth() or 0
+            local maxScroll = math.max(0, childWidth - frameWidth)
+            tabScrollFrame._maxScroll = maxScroll
+            if tabScrollFrame:GetHorizontalScroll() > maxScroll then
+                tabScrollFrame:SetHorizontalScroll(maxScroll)
+            end
+        end
+
+        tabScrollFrame:SetScript("OnSizeChanged", UpdateTabScrollBounds)
+        tabScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+            if (self._maxScroll or 0) <= 0 then
+                return
+            end
+            local step = 40
+            local newScroll = (self:GetHorizontalScroll() or 0) - (delta * step)
+            if newScroll < 0 then newScroll = 0 end
+            if newScroll > self._maxScroll then newScroll = self._maxScroll end
+            self:SetHorizontalScroll(newScroll)
+        end)
+        tabScrollFrame:SetScript("OnMouseDown", function(self, button)
+            if button ~= "LeftButton" or (self._maxScroll or 0) <= 0 then
+                return
+            end
+            self._dragging = true
+            self._dragStartX = GetCursorPosition()
+            self._dragStartScroll = self:GetHorizontalScroll() or 0
+            self:SetScript("OnUpdate", function(frame)
+                if not frame._dragging then
+                    return
+                end
+                local cursorX = GetCursorPosition()
+                local scale = frame:GetEffectiveScale() or 1
+                local delta = (frame._dragStartX - cursorX) / scale
+                local newScroll = frame._dragStartScroll + delta
+                if newScroll < 0 then newScroll = 0 end
+                if newScroll > frame._maxScroll then newScroll = frame._maxScroll end
+                frame:SetHorizontalScroll(newScroll)
+            end)
+        end)
+        tabScrollFrame:SetScript("OnMouseUp", function(self)
+            self._dragging = false
+            self:SetScript("OnUpdate", nil)
+        end)
+        tabScrollFrame:SetScript("OnHide", function(self)
+            self._dragging = false
+            self:SetScript("OnUpdate", nil)
+        end)
+
         local subContentArea = CreateFrame("Frame", nil, contentFrame)
         -- Position normally - content starts at top, tab container overlays it
         local tabContainerHeight = 35
@@ -1242,7 +1305,7 @@ local function RenderOptions(contentFrame, options, path, parentFrame)
                 displayName = displayName()
             end
             
-            local subTabBtn = CreateTabButton(subTabContainer, displayName, function(btn)
+            local subTabBtn = CreateTabButton(tabScrollChild, displayName, function(btn)
                 for _, t in ipairs(subTabButtons) do
                     t:SetActive(false)
                 end
@@ -1255,7 +1318,7 @@ local function RenderOptions(contentFrame, options, path, parentFrame)
                     C_Timer.After(0.01, contentFrame._updateSubTabHeight)
                 end
             end)
-            subTabBtn:SetPoint("LEFT", subTabContainer, "LEFT", tabX, 0)
+            subTabBtn:SetPoint("LEFT", tabScrollChild, "LEFT", tabX, 0)
 
             local textWidth = subTabBtn.label:GetStringWidth()
             local buttonWidth = textWidth + 20
@@ -1265,6 +1328,9 @@ local function RenderOptions(contentFrame, options, path, parentFrame)
             table.insert(subTabButtons, subTabBtn)
         end
         
+        tabScrollChild:SetWidth(tabX)
+        UpdateTabScrollBounds()
+
         if #subTabButtons > 0 then
             subTabButtons[1]:SetActive(true)
             RenderOptions(subScrollChild, sortedTabs[1].option, path, parentFrame)
@@ -1351,6 +1417,15 @@ local function RenderOptions(contentFrame, options, path, parentFrame)
                     NephUI.CustomIcons:BuildDynamicIconsUI(dynFrame)
                     widget = dynFrame
                     widgetHeight = dynFrame:GetHeight() or 400
+                end
+            elseif option.type == "customBuffs" then
+                if NephUI and NephUI.CustomBuffs and NephUI.CustomBuffs.BuildCustomBuffsUI then
+                    local bufFrame = CreateFrame("Frame", nil, contentFrame, "BackdropTemplate")
+                    bufFrame:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, -yOffset)
+                    bufFrame:SetPoint("BOTTOMRIGHT", contentFrame, "BOTTOMRIGHT", 0, 0)
+                    NephUI.CustomBuffs:BuildCustomBuffsUI(bufFrame)
+                    widget = bufFrame
+                    widgetHeight = bufFrame:GetHeight() or 400
                 end
             elseif option.type == "iconCustomization" then
                 if NephUI and NephUI.IconCustomization and NephUI.IconCustomization.BuildIconCustomizationUI then
@@ -1723,9 +1798,8 @@ function NephUI:CreateConfigFrame()
     end
     
     -- Disable Anchors button (rightmost, positioned before close button)
-    -- Controls unit frame, party frame, and raid frame anchors
+    -- Controls unit frame, party/raid, and dynamic icon anchors
     local disableAnchorsBtn = CreateTitleButton("Disable Anchors", function()
-        -- Disable unit frame anchors
         local db = NephUI.db.profile.unitFrames
         if not db then
             db = {}
@@ -1733,35 +1807,40 @@ function NephUI:CreateConfigFrame()
         end
         if not db.General then db.General = {} end
         db.General.ShowEditModeAnchors = false
+
         if NephUI.UnitFrames then
             NephUI.UnitFrames:UpdateEditModeAnchors()
             NephUI.UnitFrames:HideBossFramesPreview()
         end
 
-        -- Disable party and raid frame anchors
         local NUF = NephUI.PartyFrames
         if NUF then
             if NUF.LockFrames then NUF:LockFrames() end
             if NUF.LockRaidFrames then NUF:LockRaidFrames() end
         end
 
-        -- Disable test mode
-        if NUF and NUF.DisableTestMode then
-            NUF:DisableTestMode()
+        -- Refresh dynamic icon / icon group anchors (works without UnitFrames, e.g. Cooldown Manager)
+        if NephUI.CustomIcons and NephUI.CustomIcons.RefreshAnchorVisibility then
+            NephUI.CustomIcons:RefreshAnchorVisibility()
+        end
+        if NephUI.CustomBuffs and NephUI.CustomBuffs.RefreshAnchorVisibility then
+            NephUI.CustomBuffs:RefreshAnchorVisibility()
         end
 
-        -- Hide center line
-        NephUI.UpdateCenterLine()
+        if NephUI.RaidBuffs and NephUI.RaidBuffs.DisableAnchor then
+            NephUI.RaidBuffs:DisableAnchor()
+        end
 
-        print("|cff00ff00[NephUI] Anchors disabled (unit, party, raid frames)|r")
-    end, "Hide draggable anchors for unit, party, and raid frames")
+        if NephUI.UpdateCenterLine then NephUI.UpdateCenterLine() end
+
+        print("|cff00ff00[NephUI] Anchors disabled.|r")
+    end, "Hide draggable anchors for unit, party, raid, dynamic icons, and custom buffs")
     disableAnchorsBtn:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
     disableAnchorsBtn:SetWidth(110)
     
     -- Enable Anchors button
-    -- Controls unit frame, party frame, and raid frame anchors
+    -- Controls unit frame, party/raid, and dynamic icon anchors
     local enableAnchorsBtn = CreateTitleButton("Enable Anchors", function()
-        -- Enable unit frame anchors
         local db = NephUI.db.profile.unitFrames
         if not db then
             db = {}
@@ -1769,28 +1848,34 @@ function NephUI:CreateConfigFrame()
         end
         if not db.General then db.General = {} end
         db.General.ShowEditModeAnchors = true
+
         if NephUI.UnitFrames then
             NephUI.UnitFrames:UpdateEditModeAnchors()
             NephUI.UnitFrames:ShowBossFramesPreview()
         end
 
-        -- Enable party and raid frame anchors (show movers for drag-to-reposition)
         local NUF = NephUI.PartyFrames
         if NUF then
             if NUF.UnlockFrames then NUF:UnlockFrames() end
             if NUF.UnlockRaidFrames then NUF:UnlockRaidFrames() end
         end
 
-        -- Enable test mode
-        if NUF and NUF.EnableTestMode then
-            NUF:EnableTestMode("party")
+        -- Refresh dynamic icon / icon group anchors (works without UnitFrames, e.g. Cooldown Manager)
+        if NephUI.CustomIcons and NephUI.CustomIcons.RefreshAnchorVisibility then
+            NephUI.CustomIcons:RefreshAnchorVisibility()
+        end
+        if NephUI.CustomBuffs and NephUI.CustomBuffs.RefreshAnchorVisibility then
+            NephUI.CustomBuffs:RefreshAnchorVisibility()
         end
 
-        -- Show center line
-        NephUI.UpdateCenterLine()
+        if NephUI.RaidBuffs and NephUI.RaidBuffs.EnableAnchor then
+            NephUI.RaidBuffs:EnableAnchor()
+        end
 
-        print("|cff00ff00[NephUI] Anchors enabled (unit, party, raid frames)|r")
-    end, "Show draggable anchors for unit, party, raid frames, and action bars (works independently of Edit Mode)")
+        if NephUI.UpdateCenterLine then NephUI.UpdateCenterLine() end
+
+        print("|cff00ff00[NephUI] Anchors enabled. You can move dynamic icons and icon groups.|r")
+    end, "Show draggable anchors for dynamic icons, custom buffs, icon groups, and optionally unit/party/raid frames")
     enableAnchorsBtn:SetPoint("RIGHT", disableAnchorsBtn, "LEFT", -5, 0)
     enableAnchorsBtn:SetWidth(110)
     

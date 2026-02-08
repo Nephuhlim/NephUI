@@ -108,6 +108,7 @@ local DEFAULT_ICON_SETTINGS = {
     showGCDSwipe = false,
     desaturateWhenUnusable = true,
     desaturateOnCooldown = true,
+    hideIfNotUsable = true,
     countSettings = {
         size = 16,
         anchor = "BOTTOMRIGHT",
@@ -140,6 +141,7 @@ local function EnsureIconSettings(iconData)
     if settings.showGCDSwipe == nil then settings.showGCDSwipe = DEFAULT_ICON_SETTINGS.showGCDSwipe end
     if settings.desaturateWhenUnusable == nil then settings.desaturateWhenUnusable = DEFAULT_ICON_SETTINGS.desaturateWhenUnusable end
     if settings.desaturateOnCooldown == nil then settings.desaturateOnCooldown = DEFAULT_ICON_SETTINGS.desaturateOnCooldown end
+    if settings.hideIfNotUsable == nil then settings.hideIfNotUsable = DEFAULT_ICON_SETTINGS.hideIfNotUsable end
 
     settings.countSettings = settings.countSettings or {}
     if settings.countSettings.size == nil then settings.countSettings.size = DEFAULT_ICON_SETTINGS.countSettings.size end
@@ -731,6 +733,15 @@ local function EnsureEventFrame()
             return
         end
 
+        -- When equipment changes, reload slot icons to check if they should be shown/hidden
+        if event == "PLAYER_EQUIPMENT_CHANGED" or event == "UNIT_INVENTORY_CHANGED" then
+            -- Reload all icons to check slot icon usability
+            -- This will use IsIconLoadable which now checks if slot items are usable
+            if CustomIcons and CustomIcons.LoadDynamicIcons then
+                CustomIcons:LoadDynamicIcons()
+            end
+        end
+
         -- Update all icons when relevant events fire
         UpdateAllIcons()
     end)
@@ -793,10 +804,46 @@ local function IsSpellInPlayerBook(spellID)
     return true
 end
 
+local function IsSlotItemUsable(slotID)
+    if not slotID then return false end
+    
+    local itemID = GetInventoryItemID("player", slotID)
+    if not itemID then return false end
+    
+    -- Check if item has a use effect (spell) - this is the primary indicator of usability
+    local itemSpell = GetItemSpell(itemID)
+    if itemSpell then
+        return true
+    end
+    
+    -- Check if item is usable via C_Item API (most reliable check)
+    if C_Item and C_Item.IsItemUsable then
+        local isUsable = C_Item.IsItemUsable(itemID)
+        if isUsable then
+            return true
+        end
+    end
+    
+    -- If neither check indicates usability, the item is not usable
+    return false
+end
+
 local function IsIconLoadable(iconData)
     if not iconData then return false end
     if iconData.type == "spell" then
         return IsSpellInPlayerBook(iconData.id)
+    elseif iconData.type == "slot" then
+        -- Check if hideIfNotUsable is enabled (defaults to true)
+        local hideIfNotUsable = iconData.settings and iconData.settings.hideIfNotUsable
+        if hideIfNotUsable == nil then hideIfNotUsable = true end -- Default to true
+        
+        -- If hideIfNotUsable is enabled, only load slot icons if the equipped item is usable
+        if hideIfNotUsable then
+            return IsSlotItemUsable(iconData.slotID)
+        else
+            -- If disabled, always load the icon (even if item is not usable)
+            return true
+        end
     end
     return true
 end
@@ -816,6 +863,11 @@ local function ShouldIconSpawn(iconData)
     if not iconData then return false end
     -- Spellbook gating
     if iconData.type == "spell" and not IsSpellInPlayerBook(iconData.id) then
+        return false
+    end
+    
+    -- Slot item usability gating - only spawn if item is usable (respects hideIfNotUsable setting)
+    if iconData.type == "slot" and not IsIconLoadable(iconData) then
         return false
     end
 
@@ -2094,12 +2146,27 @@ function CustomIcons:RefreshDynamicListUI()
         y = y - boxHeight - 8
     end
 
+    -- Sort icons by type (Spell, Item, Slot) then by key for consistent organization
+    local function iconTypeOrder(iconKey)
+        local d = db.iconData[iconKey]
+        if not d or not d.type then return 4 end
+        if d.type == "spell" then return 1 end
+        if d.type == "item" then return 2 end
+        if d.type == "slot" then return 3 end
+        return 4
+    end
+    local function sortIconsByTypeThenKey(a, b)
+        local oa, ob = iconTypeOrder(a), iconTypeOrder(b)
+        if oa ~= ob then return oa < ob end
+        return tostring(a) < tostring(b)
+    end
+
     -- Ungrouped
     local ungroupedKeys = {}
     for k in pairs(db.ungrouped) do
         table.insert(ungroupedKeys, k)
     end
-    table.sort(ungroupedKeys)
+    table.sort(ungroupedKeys, sortIconsByTypeThenKey)
     renderSection("Ungrouped Icons", ungroupedKeys, "ungrouped")
 
     for groupKey, group in pairs(db.groups) do
@@ -2111,6 +2178,7 @@ function CustomIcons:RefreshDynamicListUI()
                 seen[k] = true
             end
         end
+        table.sort(keys, sortIconsByTypeThenKey)
         renderSection(GetGroupDisplayName(groupKey), keys, groupKey)
     end
 
@@ -2135,6 +2203,10 @@ function CustomIcons:RefreshDynamicConfigUI()
     local selectedGroup = groupKey and db.groups[groupKey]
 
     local y = 0
+    local function addSectionHeader(title)
+        Widgets.CreateHeader(uiFrames.configParent, { name = title }, y)
+        y = y + 32
+    end
     local function addSlider(text, min, max, step, getter, setter)
         local slider = Widgets.CreateRange(uiFrames.configParent, {
             name = text,
@@ -2158,6 +2230,29 @@ function CustomIcons:RefreshDynamicConfigUI()
     end
 
     local function showIconConfig()
+        -- Identity (spell/item/slot-specific)
+        if iconData.type == "spell" then
+            addSectionHeader("Identity")
+            Widgets.CreateInput(uiFrames.configParent, {
+                name = "Spell ID",
+                get = function() return tostring(iconData.id or "") end,
+                set = function(_, val)
+                    local n = tonumber(val)
+                    if n and n > 0 then
+                        iconData.id = n
+                        if iconKey and runtime.UpdateDynamicIcon then
+                            runtime.UpdateDynamicIcon(iconKey)
+                        end
+                        RefreshAllLayouts()
+                        CustomIcons:RefreshDynamicListUI()
+                    end
+                end,
+                width = "full",
+            }, y)
+            y = y + 40
+        end
+
+        addSectionHeader("Appearance")
         addSlider("Icon Size", 16, 128, 1, function() return iconData.settings.iconSize or 40 end, function(val) iconData.settings.iconSize = val end)
         addSlider("Aspect Ratio", 0.5, 2.0, 0.01, function() return iconData.settings.aspectRatio or 1.0 end, function(val) iconData.settings.aspectRatio = val end)
         addSlider("Border Size", 0, 10, 1, function() return iconData.settings.borderSize or DEFAULT_ICON_SETTINGS.borderSize end, function(val) iconData.settings.borderSize = val end)
@@ -2178,6 +2273,7 @@ function CustomIcons:RefreshDynamicConfigUI()
         }, y)
         y = y + 40
 
+        addSectionHeader("Count & Charges")
         addSlider("Count Size", 4, 64, 1, function() return (iconData.settings.countSettings and iconData.settings.countSettings.size) or 16 end, function(val)
             iconData.settings.countSettings = iconData.settings.countSettings or {}
             iconData.settings.countSettings.size = val
@@ -2288,6 +2384,7 @@ function CustomIcons:RefreshDynamicConfigUI()
         }, y, nil, nil, nil)
         y = y + 40
 
+        addSectionHeader("Cooldown")
         -- Cooldown Text Size
         addSlider("Cooldown Text Size", 4, 64, 1, function()
             local cds = iconData.settings.cooldownSettings or {}
@@ -2317,6 +2414,7 @@ function CustomIcons:RefreshDynamicConfigUI()
         }, y)
         y = y + 40
 
+        addSectionHeader("Behavior")
         Widgets.CreateToggle(uiFrames.configParent, {
             name = "Show Cooldown",
             get = function() return iconData.settings.showCooldown ~= false end,
@@ -2391,6 +2489,25 @@ function CustomIcons:RefreshDynamicConfigUI()
             width = "full",
         }, y)
         y = y + 32
+
+        -- Only show "Hide if Not Usable" toggle for slot-type icons
+        if iconData.type == "slot" then
+            Widgets.CreateToggle(uiFrames.configParent, {
+                name = "Hide if Not Usable",
+                get = function() return iconData.settings.hideIfNotUsable ~= false end,
+                set = function(_, val)
+                    iconData.settings.hideIfNotUsable = val
+                    -- Reload icons to apply the change immediately
+                    if CustomIcons and CustomIcons.LoadDynamicIcons then
+                        CustomIcons:LoadDynamicIcons()
+                    end
+                    RefreshAllLayouts()
+                    CustomIcons:RefreshDynamicConfigUI()
+                end,
+                width = "full",
+            }, y)
+            y = y + 32
+        end
 
         Widgets.CreateExecute(uiFrames.configParent, {
             name = "Load Conditions...",
@@ -2528,12 +2645,20 @@ function CustomIcons:RefreshDynamicConfigUI()
         }, y)
     end
 
+    local function updateScrollHeight()
+        if uiFrames.configChild then
+            uiFrames.configChild:SetHeight(math.max(y + 20, 1))
+        end
+    end
+
     if iconData then
         showIconConfig()
+        updateScrollHeight()
         return
     end
     if selectedGroup then
         showGroupConfig()
+        updateScrollHeight()
         return
     end
 
@@ -2541,6 +2666,7 @@ function CustomIcons:RefreshDynamicConfigUI()
     label:SetPoint("TOPLEFT", uiFrames.configParent, "TOPLEFT", 0, 20)
     label:SetText("Select an icon or group")
     label:SetTextColor(THEME.textDim[1], THEME.textDim[2], THEME.textDim[3], 1)
+    updateScrollHeight()
 end
 
 function CustomIcons:ConfirmDeleteIcon(iconKey, label)
@@ -2668,7 +2794,30 @@ function CustomIcons:BuildDynamicIconsUI(parent)
     config:SetPoint("TOPLEFT", listScroll, "TOPRIGHT", 12, 0)
     config:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
     CreateBackdrop(config, THEME.bgMedium, THEME.border)
-    uiFrames.configParent = config
+
+    -- Create scroll frame inside config panel
+    local configScroll = CreateFrame("ScrollFrame", nil, config)
+    configScroll:SetPoint("TOPLEFT", config, "TOPLEFT", 4, -4)
+    configScroll:SetPoint("BOTTOMRIGHT", config, "BOTTOMRIGHT", -20, 4)
+    local configScrollBar = CreateFrame("EventFrame", nil, config, "MinimalScrollBar")
+    configScrollBar:SetPoint("TOPLEFT", configScroll, "TOPRIGHT", 2, 0)
+    configScrollBar:SetPoint("BOTTOMLEFT", configScroll, "BOTTOMRIGHT", 2, 0)
+    configScroll.ScrollBar = configScrollBar
+    local configChild = CreateFrame("Frame", nil, configScroll)
+    configChild:SetWidth(configScroll:GetWidth() or 200)
+    configChild:SetHeight(1)
+    configScroll:SetScrollChild(configChild)
+    configScroll:SetScript("OnSizeChanged", function(_, w)
+        if configChild and w and w > 0 then
+            configChild:SetWidth(w)
+        end
+    end)
+    if ScrollUtil and ScrollUtil.InitScrollFrameWithScrollBar then
+        ScrollUtil.InitScrollFrameWithScrollBar(configScroll, configScrollBar)
+    end
+    uiFrames.configScroll = configScroll
+    uiFrames.configChild = configChild
+    uiFrames.configParent = configChild
 
     CustomIcons:RefreshDynamicListUI()
     CustomIcons:RefreshDynamicConfigUI()

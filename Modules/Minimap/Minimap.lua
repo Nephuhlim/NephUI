@@ -30,6 +30,15 @@ local function GetAnchorPoint(anchor)
     return anchorMap[anchor] or "BOTTOM"
 end
 
+local function GetClassColor()
+    local _, class = UnitClass("player")
+    if class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class] then
+        local c = RAID_CLASS_COLORS[class]
+        return c.r, c.g, c.b, 1
+    end
+    return 1, 1, 1, 1
+end
+
 -- Create backdrop frame for minimap border
 local function CreateBackdrop()
     if backdropFrame then return end
@@ -207,8 +216,12 @@ local function CreateClock()
     clockDisplay:SetFont(NephUI:GetGlobalFont(), db.clock.fontSize or 12, "OUTLINE")
     
     -- Set color
-    local color = db.clock.color or {1, 1, 1, 1}
-    clockDisplay:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+    if db.clock.useClassColor then
+        clockDisplay:SetTextColor(GetClassColor())
+    else
+        local color = db.clock.color or {1, 1, 1, 1}
+        clockDisplay:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+    end
     
     clockDisplay:SetParent(Minimap)
     clockDisplay:ClearAllPoints()
@@ -228,21 +241,32 @@ local function CreateClock()
         if not clockDisplay or not clockDisplay:IsShown() then return end
         
         local hour, minute
-        if GetCVarBool("timeMgrUseLocalTime") then
+        local useLocalTime = db.clock.timeSource == "local"
+        if db.clock.timeSource == nil then
+            useLocalTime = GetCVarBool("timeMgrUseLocalTime")
+        end
+        
+        if useLocalTime then
             hour, minute = tonumber(date("%H")), tonumber(date("%M"))
         else
             hour, minute = GetGameTime()
         end
         
-        if GetCVarBool("timeMgrUseMilitaryTime") then
+        local useMilitaryTime = db.clock.useMilitaryTime
+        if useMilitaryTime == nil then
+            useMilitaryTime = GetCVarBool("timeMgrUseMilitaryTime")
+        end
+        
+        if useMilitaryTime then
             clockDisplay:SetFormattedText(TIMEMANAGER_TICKER_24HOUR, hour, minute)
         else
+            local suffix = hour >= 12 and TIMEMANAGER_PM or TIMEMANAGER_AM
             if hour == 0 then
                 hour = 12
             elseif hour > 12 then
                 hour = hour - 12
             end
-            clockDisplay:SetFormattedText(TIMEMANAGER_TICKER_12HOUR, hour, minute)
+            clockDisplay:SetText(string.format("%d:%02d %s", hour, minute, suffix))
         end
         
         -- Update every minute (60 seconds)
@@ -272,8 +296,12 @@ local function CreateFPS()
     fpsDisplay:SetFont(NephUI:GetGlobalFont(), db.fps.fontSize or 12, "OUTLINE")
     
     -- Set color
-    local color = db.fps.color or {1, 1, 1, 1}
-    fpsDisplay:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+    if db.fps.useClassColor then
+        fpsDisplay:SetTextColor(GetClassColor())
+    else
+        local color = db.fps.color or {1, 1, 1, 1}
+        fpsDisplay:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+    end
     
     fpsDisplay:SetParent(Minimap)
     fpsDisplay:ClearAllPoints()
@@ -307,7 +335,13 @@ local function CreateFPS()
         end
         
         local fps = math.floor(GetFramerate())
-        fpsDisplay:SetText(string.format("%d FPS", fps))
+        if currentDb.fps.showPing then
+            local _, _, _, latencyHome, latencyWorld = GetNetStats()
+            local ping = currentDb.fps.pingSource == "world" and latencyWorld or latencyHome
+            fpsDisplay:SetText(string.format("%d FPS %d MS", fps, ping or 0))
+        else
+            fpsDisplay:SetText(string.format("%d FPS", fps))
+        end
         
         -- Update at configured frequency
         local updateFrequency = currentDb.fps.updateFrequency or 2.0

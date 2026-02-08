@@ -5,17 +5,15 @@ local LSM = LibStub("LibSharedMedia-3.0")
 local ViewerOptions = ns.CreateViewerOptions
 local ResourceBarOptions = ns.CreateResourceBarOptions
 local CastBarOptions = ns.CreateCastBarOptions
-local CustomIconOptions = ns.CreateCustomIconOptions
-local IconCustomizationOptions = ns.CreateIconCustomizationOptions
-local UnitFrameOptions = ns.CreateUnitFrameOptionsGroup
-local PartyFrameOptions = ns.CreatePartyFrameOptions
-local RaidFrameOptions = ns.CreateRaidFrameOptions
-local ClickCastOptions = ns.CreateClickCastOptions
-local ProfileOptions = ns.CreateProfileOptions
 local ChatOptions = ns.CreateChatOptions
-local MinimapOptions = ns.CreateMinimapOptions
 local ActionBarOptions = ns.CreateActionBarOptions
 local BuffDebuffFramesOptions = ns.CreateBuffDebuffFramesOptions
+local MinimapOptions = ns.CreateMinimapOptions
+local CustomIconOptions = ns.CreateCustomIconOptions
+local CustomBuffOptions = ns.CreateCustomBuffOptions
+local IconCustomizationOptions = ns.CreateIconCustomizationOptions
+local UnitFrameOptionsGroup = ns.CreateUnitFrameOptionsGroup
+local ProfileOptions = ns.CreateProfileOptions
 local QOLOptions = ns.CreateQOLOptions
 
 local function GetViewerOptions()
@@ -41,6 +39,43 @@ local function GetChargeAnchorOptions()
         BOTTOM      = "Bottom",
         BOTTOMRIGHT = "Bottom Right",
     }
+end
+
+-- Scan for available unit frames that can be anchored
+local function GetAvailableAnchorFrames()
+    local availableFrames = {}
+    
+    -- Frame name to display name mapping
+    local frameDisplayNames = {
+        -- Default frames
+        PlayerFrame = "Player Frame (Default)",
+        TargetFrame = "Target Frame (Default)",
+        FocusFrame = "Focus Frame (Default)",
+        PetFrame = "Pet Frame (Default)",
+        -- Unhalted Unit Frames
+        UUF_Player = "Player Frame (UUF)",
+        UUF_Target = "Target Frame (UUF)",
+        UUF_Focus = "Focus Frame (UUF)",
+        UUF_Pet = "Pet Frame (UUF)",
+        UUF_TargetTarget = "Target of Target (UUF)",
+        -- ElvUI frames
+        ElvUF_Player = "Player Frame (ElvUI)",
+        ElvUF_Target = "Target Frame (ElvUI)",
+        ElvUF_Focus = "Focus Frame (ElvUI)",
+        ElvUF_TargetTarget = "Target of Target (ElvUI)",
+        ElvUF_Pet = "Pet Frame (ElvUI)",
+    }
+    
+    -- Check each frame to see if it exists
+    for frameName, displayName in pairs(frameDisplayNames) do
+        local frame = _G[frameName]
+        if frame and type(frame) == "table" then
+            -- Frame exists and is a valid frame object
+            availableFrames[frameName] = displayName
+        end
+    end
+    
+    return availableFrames
 end
 
 local function CreateBuffBarViewerOptions(order)
@@ -892,7 +927,7 @@ function NephUI:SetupOptions()
             general = {
                 type = "group",
                 name = "General",
-                order = 0,
+                order = 1,
                 args = {
                     -- General Settings Header
                     generalHeader = {
@@ -1162,31 +1197,11 @@ function NephUI:SetupOptions()
                 },
             },
             
-            -- MINIMAP TAB (moved from General sub-tab)
-            minimap = MinimapOptions(),
-            
-            -- CHAT TAB (moved from General sub-tab)
-            chat = ChatOptions(),
-
-            -- QUALITY OF LIFE TAB
-            qol = QOLOptions(),
-            
-            -- ACTION BARS TAB
-            actionBars = ActionBarOptions(),
-
-            -- BUFF/DEBUFF FRAMES TAB
-            buffDebuffFrames = BuffDebuffFramesOptions(),
-
-            -- PARTY & RAID FRAME TABS
-            partyFrames = PartyFrameOptions(),
-            raidFrames = RaidFrameOptions(),
-            clickCast = ClickCastOptions(),
-
             -- Cooldown Manager TAB
             viewers = {
                 type = "group",
                 name = "Cooldown Manager",
-                order = 3,
+                order = 5,
                 childGroups = "tab",
                 args = {
                     general = {
@@ -1198,6 +1213,200 @@ function NephUI:SetupOptions()
                                 type = "header",
                                 name = "Cooldown Manager Settings",
                                 order = 1,
+                            },
+                            -- Anchor to Unit Frame Section
+                            anchorHeader = {
+                                type = "header",
+                                name = "Unit Frame Anchoring",
+                                order = 5,
+                            },
+                            anchorToUnitFrame = {
+                                type = "toggle",
+                                name = "Anchor Unit Frames to Viewer (Used for non NephUI Unit Frames)",
+                                desc = "Automatically anchor Player/Target/Focus/Pet frames to Essential Cooldown Viewer. Supports default frames, Unhalted Unit Frames (UUF), and ElvUI frames.",
+                                width = "full",
+                                order = 6,
+                                get = function()
+                                    return NephUI.db.profile.viewers.general.anchorToUnitFrame or false
+                                end,
+                                set = function(_, val)
+                                    NephUI.db.profile.viewers.general.anchorToUnitFrame = val
+                                    -- Clear watcher flag so it can be set up again if needed
+                                    if NephUI.__nephuiViewerWatcher then
+                                        NephUI.__nephuiViewerWatcher = nil
+                                    end
+                                    if NephUI.UpdateViewerUnitFrameAnchor then
+                                        -- Delay to allow frames to spawn
+                                        C_Timer.After(0.5, function()
+                                            NephUI:UpdateViewerUnitFrameAnchor()
+                                        end)
+                                    end
+                                    -- Refresh GUI to show/hide anchor position options
+                                    local AceConfigRegistry = LibStub("AceConfigRegistry-3.0", true)
+                                    if AceConfigRegistry then
+                                        AceConfigRegistry:NotifyChange(ADDON_NAME)
+                                    end
+                                    -- Refresh custom GUI if open
+                                    local configFrame = _G["NephUI_ConfigFrame"]
+                                    if configFrame and configFrame:IsShown() and configFrame.FullRefresh then
+                                        configFrame:FullRefresh()
+                                    end
+                                end,
+                            },
+                            anchorSpacer = {
+                                type = "description",
+                                name = " ",
+                                order = 7,
+                            },
+                            -- Frame Selection Dropdown
+                            selectedAnchorFrame = {
+                                type = "select",
+                                name = "Select Frame to Adjust",
+                                desc = "Choose which unit frame to adjust the position for",
+                                order = 8,
+                                width = "full",
+                                disabled = function()
+                                    return not (NephUI.db.profile.viewers.general.anchorToUnitFrame or false)
+                                end,
+                                values = function()
+                                    -- Scan for available unit frames that are currently loaded
+                                    return GetAvailableAnchorFrames()
+                                end,
+                                get = function()
+                                    local cfg = NephUI.db.profile.viewers.general
+                                    if not cfg.anchorPositions then
+                                        cfg.anchorPositions = {}
+                                    end
+                                    local selectedFrame = cfg.anchorPositions.selectedFrame or "PlayerFrame"
+                                    -- Verify the selected frame still exists, fallback to first available if not
+                                    local availableFrames = GetAvailableAnchorFrames()
+                                    if not availableFrames[selectedFrame] then
+                                        -- Find first available frame (prefer PlayerFrame if available)
+                                        if availableFrames.PlayerFrame then
+                                            selectedFrame = "PlayerFrame"
+                                        else
+                                            -- Get first available frame
+                                            for frameName, _ in pairs(availableFrames) do
+                                                selectedFrame = frameName
+                                                break
+                                            end
+                                        end
+                                        cfg.anchorPositions.selectedFrame = selectedFrame
+                                    end
+                                    return selectedFrame
+                                end,
+                                set = function(_, val)
+                                    local cfg = NephUI.db.profile.viewers.general
+                                    if not cfg.anchorPositions then
+                                        cfg.anchorPositions = {}
+                                    end
+                                    cfg.anchorPositions.selectedFrame = val
+                                end,
+                            },
+                            anchorOffsetX = {
+                                type = "range",
+                                name = "Horizontal Offset (X)",
+                                desc = "Adjust the horizontal position offset for the selected frame",
+                                order = 9,
+                                width = "full",
+                                min = -1000,
+                                max = 1000,
+                                step = 1,
+                                disabled = function()
+                                    return not (NephUI.db.profile.viewers.general.anchorToUnitFrame or false)
+                                end,
+                                get = function()
+                                    local cfg = NephUI.db.profile.viewers.general
+                                    if not cfg.anchorPositions then
+                                        cfg.anchorPositions = {}
+                                    end
+                                    local selectedFrame = cfg.anchorPositions.selectedFrame or "PlayerFrame"
+                                    if not cfg.anchorPositions[selectedFrame] then
+                                        cfg.anchorPositions[selectedFrame] = {}
+                                    end
+                                    -- Get default offset from hard-coded config if not set
+                                    local defaultOffsets = {
+                                        PlayerFrame = -20,
+                                        TargetFrame = 20,
+                                        FocusFrame = 0,
+                                        PetFrame = 0,
+                                        UUF_Player = -20,
+                                        UUF_Target = 20,
+                                        UUF_Focus = 0,
+                                        UUF_Pet = 0,
+                                        UUF_TargetTarget = 0,
+                                        ElvUF_Player = -20,
+                                        ElvUF_Target = 20,
+                                        ElvUF_Focus = 0,
+                                        ElvUF_TargetTarget = 0,
+                                        ElvUF_Pet = 0,
+                                    }
+                                    return cfg.anchorPositions[selectedFrame].offsetX or defaultOffsets[selectedFrame] or 0
+                                end,
+                                set = function(_, val)
+                                    local cfg = NephUI.db.profile.viewers.general
+                                    if not cfg.anchorPositions then
+                                        cfg.anchorPositions = {}
+                                    end
+                                    local selectedFrame = cfg.anchorPositions.selectedFrame or "PlayerFrame"
+                                    if not cfg.anchorPositions[selectedFrame] then
+                                        cfg.anchorPositions[selectedFrame] = {}
+                                    end
+                                    cfg.anchorPositions[selectedFrame].offsetX = val
+                                    -- Apply the change immediately
+                                    if NephUI.UpdateViewerUnitFrameAnchor then
+                                        C_Timer.After(0.1, function()
+                                            NephUI:UpdateViewerUnitFrameAnchor()
+                                        end)
+                                    end
+                                end,
+                            },
+                            anchorOffsetY = {
+                                type = "range",
+                                name = "Vertical Offset (Y)",
+                                desc = "Adjust the vertical position offset for the selected frame",
+                                order = 10,
+                                width = "full",
+                                min = -1000,
+                                max = 1000,
+                                step = 1,
+                                disabled = function()
+                                    return not (NephUI.db.profile.viewers.general.anchorToUnitFrame or false)
+                                end,
+                                get = function()
+                                    local cfg = NephUI.db.profile.viewers.general
+                                    if not cfg.anchorPositions then
+                                        cfg.anchorPositions = {}
+                                    end
+                                    local selectedFrame = cfg.anchorPositions.selectedFrame or "PlayerFrame"
+                                    if not cfg.anchorPositions[selectedFrame] then
+                                        cfg.anchorPositions[selectedFrame] = {}
+                                    end
+                                    -- Default Y offset is 0 for all frames
+                                    return cfg.anchorPositions[selectedFrame].offsetY or 0
+                                end,
+                                set = function(_, val)
+                                    local cfg = NephUI.db.profile.viewers.general
+                                    if not cfg.anchorPositions then
+                                        cfg.anchorPositions = {}
+                                    end
+                                    local selectedFrame = cfg.anchorPositions.selectedFrame or "PlayerFrame"
+                                    if not cfg.anchorPositions[selectedFrame] then
+                                        cfg.anchorPositions[selectedFrame] = {}
+                                    end
+                                    cfg.anchorPositions[selectedFrame].offsetY = val
+                                    -- Apply the change immediately
+                                    if NephUI.UpdateViewerUnitFrameAnchor then
+                                        C_Timer.After(0.1, function()
+                                            NephUI:UpdateViewerUnitFrameAnchor()
+                                        end)
+                                    end
+                                end,
+                            },
+                            anchorPositionSpacer = {
+                                type = "description",
+                                name = " ",
+                                order = 10.5,
                             },
                             -- Proc Glow Section
                             procGlowHeader = {
@@ -1379,19 +1588,37 @@ function NephUI:SetupOptions()
                     iconCustomization = IconCustomizationOptions(),
                 },
             },
+
+            -- CHAT TAB
+            chat = ChatOptions(),
+
+            -- MINIMAP TAB
+            minimap = MinimapOptions(),
+            
+            -- ACTION BARS TAB
+            actionBars = ActionBarOptions(),
+            
+            -- BUFF/DEBUFF FRAMES TAB
+            buffDebuffFrames = BuffDebuffFramesOptions(),
             
             -- RESOURCE BARS TAB
             resourceBars = ResourceBarOptions(),
             
             -- CAST BARS TAB
             castBars = CastBarOptions(),
+
+            -- UNIT FRAMES TAB
+            unitFrames = UnitFrameOptionsGroup(),
             
             -- CUSTOM ICONS TAB
             customIcons = CustomIconOptions(),
+
+            -- CUSTOM BUFFS TAB
+            customBuffs = CustomBuffOptions(),
             
-            -- UNIT FRAMES TAB
-            unitFrames = UnitFrameOptions(),
-            
+            -- QOL TAB
+            qol = QOLOptions(),
+
             -- IMPORT / EXPORT TAB
             importExport = ProfileOptions(),
         },
@@ -1454,7 +1681,7 @@ function NephUI:SetupOptions()
         
         -- Override name and order
         options.args.profiles.name = "Profiles"
-        options.args.profiles.order = 98
+        options.args.profiles.order = 12
         
         -- NOW we can safely enhance with LibDualSpec on the original profileOptions
         -- Since we've already copied profileOptions.args, any modifications to the original
@@ -1859,50 +2086,6 @@ function NephUI:SetupOptions()
         end,
     }
 
-    options.args.enableUnitFrameAnchors = {
-        type = "execute",
-        name = "Enable Unit Frame Anchors",
-        desc = "Show draggable anchors for unit frames (works independently of Edit Mode)",
-        order = 102,
-        func = function()
-            local db = NephUI.db.profile.unitFrames
-            if not db then
-                db = {}
-                NephUI.db.profile.unitFrames = db
-            end
-            if not db.General then db.General = {} end
-            db.General.ShowEditModeAnchors = true
-            if NephUI.UnitFrames then
-                NephUI.UnitFrames:UpdateEditModeAnchors()
-                print("|cff00ff00[NephUI] Unit frame anchors enabled|r")
-            else
-                print("|cffff0000[NephUI] Unit frames not initialized|r")
-            end
-        end,
-    }
-
-    options.args.disableUnitFrameAnchors = {
-        type = "execute",
-        name = "Disable Unit Frame Anchors",
-        desc = "Hide draggable anchors for unit frames",
-        order = 103,
-        func = function()
-            local db = NephUI.db.profile.unitFrames
-            if not db then
-                db = {}
-                NephUI.db.profile.unitFrames = db
-            end
-            if not db.General then db.General = {} end
-            db.General.ShowEditModeAnchors = false
-            if NephUI.UnitFrames then
-                NephUI.UnitFrames:UpdateEditModeAnchors()
-                print("|cff00ff00[NephUI] Unit frame anchors disabled|r")
-            else
-                print("|cffff0000[NephUI] Unit frames not initialized|r")
-            end
-        end,
-    }
-
     -- Version display and Discord link button
     options.args.versionSpacer = {
         type = "description",
@@ -1937,17 +2120,3 @@ function NephUI:SetupOptions()
     self.configOptions = options
 end
 
--- Disable unit frame anchors when config panel closes
-function NephUI:DisableUnitFrameAnchorsOnConfigClose()
-    local db = self.db.profile.unitFrames
-    if not db then return end
-    if not db.General then db.General = {} end
-    
-    -- Only disable if anchors are currently enabled
-    if db.General.ShowEditModeAnchors then
-        db.General.ShowEditModeAnchors = false
-        if self.UnitFrames then
-            self.UnitFrames:UpdateEditModeAnchors()
-        end
-    end
-end

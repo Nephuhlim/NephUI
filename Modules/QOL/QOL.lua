@@ -27,9 +27,14 @@ end
 
 local function TooltipIDsAllowed()
     local db = GetDB()
-    if not (db and db.tooltipIDs) then return false end
-    if InCombatLockdown and InCombatLockdown() then return false end
-    return true
+    return db and db.tooltipIDs
+end
+
+-- Like idTip: Blizzard marks tooltip data as "secret" in combat/restricted contexts.
+-- Checking this (instead of InCombatLockdown) avoids showing IDs when data is restricted.
+local function isSecret(value)
+    if not issecretvalue or not issecrettable then return false end
+    return issecretvalue(value) or issecrettable(value)
 end
 
 function QOL:IsHideBagsBarEnabled()
@@ -240,7 +245,6 @@ end
 local tooltipKinds = {
     spell = "SpellID",
     item = "ItemID",
-    unit = "NPC ID",
     quest = "QuestID",
     talent = "TalentID",
     achievement = "AchievementID",
@@ -299,6 +303,7 @@ local tooltipKindsByID = {
 }
 
 local function tooltipAddLine(tooltip, id, kind)
+    if isSecret(id) then return end
     if not id or id == "" or not tooltip or not tooltip.GetName then return end
 
     if not TooltipIDsAllowed() then return end
@@ -308,6 +313,7 @@ local function tooltipAddLine(tooltip, id, kind)
     for i = tooltip:NumLines(), 1, -1 do
         frame = _G[tooltip:GetName() .. "TextLeft" .. i]
         if frame then text = frame:GetText() end
+        if isSecret(text) then return end
         if text and string.find(text, tooltipKinds[kind]) then return end
     end
 
@@ -327,22 +333,13 @@ local function tooltipAdd(tooltip, id, kind)
     if not TooltipIDsAllowed() then return end
     tooltipAddLine(tooltip, id, kind)
 
-    -- spell texture
-    if kind == "spell" and GetSpellTexture and type(id) == "number" then
-        local iconId = GetSpellTexture(id)
-        if iconId then tooltipAdd(tooltip, iconId, "icon") end
-    end
-
-    -- item icon
-    if kind == "item" and GetItemIconByID and type(id) == "number" then
-        local iconId = GetItemIconByID(id)
-        if iconId then tooltipAdd(tooltip, iconId, "icon") end
-    end
-
     -- item spell
-    if kind == "item" and GetItemSpell and type(id) == "number" then
-        local spellId = select(2, GetItemSpell(id))
-        if spellId then tooltipAdd(tooltip, spellId, "spell") end
+    if kind == "item" and GetItemSpell then
+        local numId = type(id) == "number" and id or tonumber(id)
+        if numId then
+            local spellId = select(2, GetItemSpell(numId))
+            if spellId then tooltipAdd(tooltip, spellId, "spell") end
+        end
     end
 end
 
@@ -424,24 +421,11 @@ function QOL:InitializeTooltipIDs()
         TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, function(tooltip, data)
             if not TooltipIDsAllowed() then return end
             if not data or not data.type then return end
+            if isSecret(data.type) or isSecret(data.guid) then return end
             local kind = tooltipKindsByID[tonumber(data.type)]
 
-            -- unit special handling
-            if kind == "unit" and data then
-                -- Safely check if we can access guid (it becomes a secret value in combat)
-                local guid = data.guid
-                if guid and type(guid) == "string" then
-                    local unitId = tonumber(guid:match("-(%d+)-%x+$"), 10)
-                    if unitId and guid:match("%a+") ~= "Player" then
-                        tooltipAdd(tooltip, unitId, "unit")
-                    else
-                        tooltipAdd(tooltip, data.id, "unit")
-                    end
-                else
-                    -- Fallback to data.id when guid is not accessible
-                    tooltipAdd(tooltip, data.id, "unit")
-                end
-            elseif kind == "item" and data then
+            if kind == "unit" then return end -- NPC IDs not shown
+            if kind == "item" and data then
                 -- Safely check if we can access guid for items
                 local guid = data.guid
                 if guid and type(guid) == "string" and GetItemLinkByGUID then
@@ -597,4 +581,248 @@ function QOL:RefreshTooltipIDs()
     end
 end
 
+
+---------------------------------------------------------------------------
+-- Automation
+---------------------------------------------------------------------------
+
+local function GetSettings()
+    return GetDB()
+end
+
+local function OnMerchantShow()
+    local settings = GetSettings()
+    if not settings then return end
+
+    if settings.sellJunk then
+        for bag = 0, 4 do
+            for slot = 1, C_Container.GetContainerNumSlots(bag) do
+                local info = C_Container.GetContainerItemInfo(bag, slot)
+                if info and info.quality == Enum.ItemQuality.Poor then
+                    C_Container.UseContainerItem(bag, slot)
+                end
+            end
+        end
+    end
+
+    local repairMode = settings.autoRepair
+    if repairMode and repairMode ~= "off" and CanMerchantRepair() then
+        local repairCost = GetRepairAllCost()
+        if repairCost and repairCost > 0 then
+            if repairMode == "guildFirst" then
+                local canGuildRepair = CanGuildBankRepair()
+                RepairAllItems(canGuildRepair)
+            else
+                RepairAllItems(false)
+            end
+        end
+    end
+end
+
+local function IsFriendOrBNet(name)
+    if not name then return false end
+    if C_FriendList.IsFriend(name) then return true end
+
+    local numBNetTotal = BNGetNumFriends()
+    for i = 1, numBNetTotal do
+        local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+        if accountInfo and accountInfo.gameAccountInfo then
+            local charName = accountInfo.gameAccountInfo.characterName
+            local realmName = accountInfo.gameAccountInfo.realmName
+            if charName then
+                local fullName = realmName and (charName .. "-" .. realmName) or charName
+                if fullName == name or charName == name:match("^([^-]+)") then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function IsGuildMemberByName(name)
+    if not name or not IsInGuild() then return false end
+    local numMembers = GetNumGuildMembers()
+    local searchName = name:match("^([^-]+)") or name
+    for i = 1, numMembers do
+        local memberName = GetGuildRosterInfo(i)
+        if memberName then
+            local memberShort = memberName:match("^([^-]+)") or memberName
+            if memberShort == searchName then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function OnPartyInvite(inviterName)
+    local settings = GetSettings()
+    if not settings or not settings.autoAcceptInvites then return end
+
+    local shouldAccept = IsFriendOrBNet(inviterName) or IsGuildMemberByName(inviterName)
+    if shouldAccept then
+        AcceptGroup()
+        StaticPopup_Hide("PARTY_INVITE")
+    end
+end
+
+local function OnQuestDetail()
+    local settings = GetSettings()
+    if not settings or not settings.autoAcceptQuest then return end
+    AcceptQuest()
+end
+
+local function OnQuestComplete()
+    local settings = GetSettings()
+    if not settings or not settings.autoTurnInQuest then return end
+
+    local numChoices = GetNumQuestChoices()
+    if numChoices > 1 then return end
+    GetQuestReward(numChoices > 0 and 1 or nil)
+end
+
+local lootRetryPending = false
+
+local function TryLootAll()
+    local numItems = GetNumLootItems()
+    for slotIndex = 1, numItems do
+        if LootSlotHasItem(slotIndex) then
+            LootSlot(slotIndex)
+        end
+    end
+end
+
+local function CheckRemainingLoot()
+    lootRetryPending = false
+    local settings = GetSettings()
+    if not settings or not settings.fastAutoLoot then return end
+
+    local numItems = GetNumLootItems()
+    for slotIndex = 1, numItems do
+        if LootSlotHasItem(slotIndex) then
+            TryLootAll()
+            return
+        end
+    end
+end
+
+local function OnLootReady()
+    local settings = GetSettings()
+    if not settings or not settings.fastAutoLoot then return end
+
+    if not GetCVarBool("autoLootDefault") then
+        SetCVar("autoLootDefault", "1")
+    end
+
+    TryLootAll()
+
+    if not lootRetryPending then
+        lootRetryPending = true
+        C_Timer.After(0.1, CheckRemainingLoot)
+    end
+end
+
+local deletePopups = {
+    ["DELETE_ITEM"] = true,
+    ["DELETE_GOOD_ITEM"] = true,
+    ["DELETE_GOOD_QUEST_ITEM"] = true,
+    ["DELETE_QUEST_ITEM"] = true,
+}
+
+local deleteHooked = false
+local function EnsureDeleteConfirmHook()
+    if deleteHooked then return end
+    deleteHooked = true
+
+    hooksecurefunc("StaticPopup_Show", function(which)
+        if not deletePopups[which] then return end
+
+        local settings = GetSettings()
+        if not settings or not settings.autoDeleteConfirm then return end
+
+        for i = 1, STATICPOPUP_NUMDIALOGS or 4 do
+            local frame = _G["StaticPopup" .. i]
+            if frame and frame.which == which and frame:IsShown() then
+                local editBox = frame.editBox or _G["StaticPopup" .. i .. "EditBox"]
+                if editBox then
+                    editBox:SetText(DELETE_ITEM_CONFIRM_STRING or "DELETE")
+                    local handler = editBox:GetScript("OnTextChanged")
+                    if handler then
+                        handler(editBox)
+                    end
+                end
+                break
+            end
+        end
+    end)
+end
+
+local function FindKeystoneInBags()
+    local numBagFrames = NUM_BAG_FRAMES or 4
+    for bag = 0, numBagFrames do
+        local slots = C_Container.GetContainerNumSlots(bag)
+        for slot = 1, slots do
+            local itemID = C_Container.GetContainerItemID(bag, slot)
+            if itemID then
+                local itemClass, itemSubClass = select(12, C_Item.GetItemInfo(itemID))
+                if itemClass == Enum.ItemClass.Reagent and itemSubClass == Enum.ItemReagentSubclass.Keystone then
+                    return bag, slot
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function InsertKeystone()
+    local settings = GetSettings()
+    if not settings or not settings.autoInsertKey then return end
+
+    local bag, slot = FindKeystoneInBags()
+    if not bag then return end
+
+    C_Container.PickupContainerItem(bag, slot)
+    if C_Cursor.GetCursorItem() then
+        C_ChallengeMode.SlotKeystone()
+    end
+end
+
+local keystoneHooked = false
+local function HookKeystoneFrame()
+    if keystoneHooked then return end
+    if ChallengesKeystoneFrame then
+        ChallengesKeystoneFrame:HookScript("OnShow", InsertKeystone)
+        keystoneHooked = true
+    end
+end
+
+local automationFrame = CreateFrame("Frame")
+automationFrame:RegisterEvent("MERCHANT_SHOW")
+automationFrame:RegisterEvent("PARTY_INVITE_REQUEST")
+automationFrame:RegisterEvent("QUEST_DETAIL")
+automationFrame:RegisterEvent("QUEST_COMPLETE")
+automationFrame:RegisterEvent("LOOT_READY")
+automationFrame:RegisterEvent("ADDON_LOADED")
+
+automationFrame:SetScript("OnEvent", function(_, event, ...)
+    if event == "MERCHANT_SHOW" then
+        OnMerchantShow()
+    elseif event == "PARTY_INVITE_REQUEST" then
+        OnPartyInvite(...)
+    elseif event == "QUEST_DETAIL" then
+        OnQuestDetail()
+    elseif event == "QUEST_COMPLETE" then
+        OnQuestComplete()
+    elseif event == "LOOT_READY" then
+        OnLootReady()
+    elseif event == "ADDON_LOADED" then
+        local addonName = ...
+        if addonName == "Blizzard_ChallengesUI" then
+            HookKeystoneFrame()
+        end
+    end
+end)
+
+EnsureDeleteConfirmHook()
 

@@ -1,9 +1,9 @@
-## Interface: 120000, 110207
+## Interface: 120000, 120001
 ## Title: NephUI
 ## Notes: Lightweight UI Overhaul AddOn
 ## Author: Nephuhlim
-## Version: 1.36
-## SavedVariables: NephUIDB, NephUIClickCastingDB
+## Version: 2.03
+## SavedVariables: NephUIDB
 ## OptionalDeps: Ace3, LibSharedMedia-3.0
 ## X-TaintLess-DisableMitigations: CUF_PROFILE_ACTIVATE_PATCH_VERSION=1
 
@@ -45,8 +45,8 @@ Core\Media.lua
 Core\GUI.lua
 
 # Utility files
-Utils\Toolkit.lua
 Utils\PixelPerfect.lua
+Utils\Toolkit.lua
 Utils\Nudge.lua
 
 # Config files
@@ -55,15 +55,13 @@ Config\ResourceBarOptions.lua
 Config\CastBarOptions.lua
 Config\ChatOptions.lua
 Config\CustomIconOptions.lua
+Config\CustomBuffOptions.lua
 Config\IconCustomizationOptions.lua
 Config\UnitFrameOptions.lua
 Config\ProfileOptions.lua
 Config\MinimapOptions.lua
 Config\ActionBarOptions.lua
 Config\BuffDebuffFramesOptions.lua
-Config\PartyFrameOptions.lua
-Config\RaidFrameOptions.lua
-Config\ClickCastOptions.lua
 Config\QOLOptions.lua
 Config.lua
 
@@ -79,6 +77,9 @@ Modules\IconViewers\Keybinds.lua
 
 # CustomIcons
 Modules\CustomIcons\CustomIcons.lua
+
+# CustomBuffs
+Modules\CustomBuffs\CustomBuffs.lua
 
 # IconCustomization
 Modules\IconCustomization\IconCustomization.lua
@@ -97,18 +98,6 @@ Modules\ResourceBars\PrimaryPowerBar.lua
 Modules\ResourceBars\SecondaryPowerBar.lua
 Modules\ResourceBars\ResourceBars.lua
 
-# AbsorbBars
-Modules\AbsorbBars\AbsorbBars.lua
-
-# AutoUIScale
-Modules\AutoUIScale\AutoUIScale.lua
-
-# QOL
-Modules\QOL\QOL.lua
-
-# CharacterPanel
-Modules\CharacterPanel\CharacterPanel.lua
-
 # UnitFrames
 Modules\UnitFrames\UnitFrames.lua
 Modules\UnitFrames\Helpers.lua
@@ -120,39 +109,24 @@ Modules\UnitFrames\FrameUpdates.lua
 Modules\UnitFrames\EditMode.lua
 Modules\UnitFrames\Anchors.lua
 
-# Party/Raid Frames - Main module must load first
-Modules\PartyRaidFrames\PartyRaidFrames.lua
-Modules\PartyRaidFrames\Defaults.lua
-Modules\PartyRaidFrames\Profile.lua
-Modules\PartyRaidFrames\ExportCategories.lua
-Modules\PartyRaidFrames\GUI\IconLib.lua
-Modules\PartyRaidFrames\GUI\GUI.lua
-Modules\PartyRaidFrames\Options\Options.lua
-Modules\PartyRaidFrames\Frames\Core.lua
-Modules\PartyRaidFrames\Frames\Colors.lua
-Modules\PartyRaidFrames\Frames\Create.lua
-Modules\PartyRaidFrames\Frames\Update.lua
-Modules\PartyRaidFrames\Frames\Icons.lua
-Modules\PartyRaidFrames\Frames\Init.lua
-Modules\PartyRaidFrames\Frames\Pets.lua
-Modules\PartyRaidFrames\TestMode\TestMode.lua
-Modules\PartyRaidFrames\Features\Auras.lua
-Modules\PartyRaidFrames\Features\PrivateAuras.lua
-Modules\PartyRaidFrames\Features\Highlights.lua
-Modules\PartyRaidFrames\Features\Range.lua
-Modules\PartyRaidFrames\Features\Sort.lua
-Modules\PartyRaidFrames\Features\Dispel.lua
-Modules\PartyRaidFrames\Features\TargetedSpells.lua
+# AbsorbBars
+Modules\AbsorbBars\AbsorbBars.lua
 
-# Party/Raid Frames - Click Casting
-Modules\PartyRaidFrames\ClickCasting\ClickCasting.lua
-Modules\PartyRaidFrames\ClickCasting\ClickCastOptions.lua
+# AutoUIScale
+Modules\AutoUIScale\AutoUIScale.lua
 
-# Chat
-Modules\Chat\Chat.lua
+# QOL
+Modules\QOL\QOL.lua
+Modules\QOL\RaidBuffs.lua
 
 # Minimap
 Modules\Minimap\Minimap.lua
+
+# CharacterPanel
+Modules\CharacterPanel\CharacterPanel.lua
+
+# Chat
+Modules\Chat\Chat.lua
 
 # ActionBars
 Modules\ActionBars\ActionBars.lua

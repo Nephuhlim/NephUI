@@ -244,7 +244,34 @@ function IconViewers:SkinIcon(icon, settings)
         icon.Cooldown:ClearAllPoints()
         icon.Cooldown:SetAllPoints(iconTexture)
         -- Match swipe to unmasked icon bounds
-        icon.Cooldown:SetSwipeColor(0, 0, 0, 0.8)
+        -- Use cooldownSwipeAlpha setting if available (BuffIconCooldownViewer only), otherwise default to 0.8
+        local swipeAlpha = (settings.cooldownSwipeAlpha ~= nil) and settings.cooldownSwipeAlpha or 0.8
+        
+        -- Store the desired swipe alpha on the icon frame if custom alpha is set
+        -- This allows us to enforce it when Blizzard updates the cooldown
+        if settings.cooldownSwipeAlpha ~= nil then
+            icon.__nephuiSwipeAlpha = swipeAlpha
+            
+            -- Hook SetSwipeColor to enforce our custom alpha whenever Blizzard tries to change it
+            if not icon.Cooldown.__nephuiSwipeColorHooked then
+                icon.Cooldown.__nephuiSwipeColorHooked = true
+                hooksecurefunc(icon.Cooldown, "SetSwipeColor", function(self, r, g, b, a)
+                    local parentFrame = self:GetParent()
+                    if not parentFrame or not parentFrame.__nephuiSwipeAlpha then return end
+                    if parentFrame.__nephuiBypassSwipeHook then return end
+                    
+                    -- Enforce our custom alpha (preserve the RGB values from the call, but use our alpha)
+                    parentFrame.__nephuiBypassSwipeHook = true
+                    self:SetSwipeColor(r, g, b, parentFrame.__nephuiSwipeAlpha)
+                    parentFrame.__nephuiBypassSwipeHook = false
+                end)
+            end
+        else
+            -- Clear stored alpha if setting is not present
+            icon.__nephuiSwipeAlpha = nil
+        end
+        
+        icon.Cooldown:SetSwipeColor(0, 0, 0, swipeAlpha)
         icon.Cooldown:SetDrawEdge(true)
         icon.Cooldown:SetDrawSwipe(true)
         icon.Cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")

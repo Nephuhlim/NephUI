@@ -1,8 +1,161 @@
 local ADDON_NAME, ns = ...
 local NephUI = ns.Addon
-local L = ns.L or LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true)
+local L = ns.L or LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true) or {}
 local LSM = LibStub("LibSharedMedia-3.0")
 local buildVersion = select(4, GetBuildInfo())
+
+local BAR_ASSIGNMENT_VALUES = {
+    primary = "Bar 1 (Primary)",
+    secondary = "Bar 2 (Secondary)",
+    hide = "Hide",
+}
+
+local CLASS_ORDER = {
+    "DEATHKNIGHT",
+    "DEMONHUNTER",
+    "DRUID",
+    "EVOKER",
+    "HUNTER",
+    "MAGE",
+    "MONK",
+    "PALADIN",
+    "PRIEST",
+    "ROGUE",
+    "SHAMAN",
+    "WARLOCK",
+    "WARRIOR",
+}
+
+local POWER_TYPE_LABELS = {
+    [Enum.PowerType.Mana] = "Mana",
+    [Enum.PowerType.Rage] = "Rage",
+    [Enum.PowerType.Focus] = "Focus",
+    [Enum.PowerType.Energy] = "Energy",
+    [Enum.PowerType.ComboPoints] = "Combo Points",
+    [Enum.PowerType.Runes] = "Runes",
+    [Enum.PowerType.RunicPower] = "Runic Power",
+    [Enum.PowerType.SoulShards] = "Soul Shards",
+    [Enum.PowerType.LunarPower] = "Astral Power",
+    [Enum.PowerType.HolyPower] = "Holy Power",
+    [Enum.PowerType.Maelstrom] = "Maelstrom",
+    [Enum.PowerType.Chi] = "Chi",
+    [Enum.PowerType.Insanity] = "Insanity",
+    [Enum.PowerType.ArcaneCharges] = "Arcane Charges",
+    [Enum.PowerType.Fury] = "Fury",
+    [Enum.PowerType.Pain] = "Pain",
+    [Enum.PowerType.Essence] = "Essence",
+    ["SOUL"] = "Soul Fragments",
+    ["STAGGER"] = "Stagger",
+    ["MAELSTROM_WEAPON"] = "Maelstrom Weapon",
+}
+
+local CLASS_SPEC_RESOURCES = {
+    DEATHKNIGHT = {
+        [250] = { primary = { Enum.PowerType.RunicPower }, secondary = { Enum.PowerType.Runes } }, -- Blood
+        [251] = { primary = { Enum.PowerType.RunicPower }, secondary = { Enum.PowerType.Runes } }, -- Frost
+        [252] = { primary = { Enum.PowerType.RunicPower }, secondary = { Enum.PowerType.Runes } }, -- Unholy
+    },
+    DEMONHUNTER = {
+        [577]  = { primary = { Enum.PowerType.Fury }, secondary = {} }, -- Havoc
+        [581]  = { primary = { Enum.PowerType.Fury }, secondary = { "SOUL" } }, -- Vengeance
+        [1480] = { primary = { Enum.PowerType.Fury }, secondary = { "SOUL" } }, -- Devourer (Aldrachi Reaver)
+    },
+    DRUID = {
+        [102] = { primary = { Enum.PowerType.LunarPower }, secondary = { Enum.PowerType.Mana } }, -- Balance
+        [103] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Feral
+        [104] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Guardian
+        [105] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.ComboPoints } }, -- Restoration (Cat form)
+    },
+    EVOKER = {
+        [1467] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.Essence } }, -- Devastation
+        [1468] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.Essence } }, -- Preservation
+        [1473] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.Essence } }, -- Augmentation
+    },
+    HUNTER = {
+        [253] = { primary = { Enum.PowerType.Focus }, secondary = {} }, -- Beast Mastery
+        [254] = { primary = { Enum.PowerType.Focus }, secondary = {} }, -- Marksmanship
+        [255] = { primary = { Enum.PowerType.Focus }, secondary = {} }, -- Survival
+    },
+    MAGE = {
+        [62] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.ArcaneCharges } }, -- Arcane
+        [63] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Fire
+        [64] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Frost
+    },
+    MONK = {
+        [268] = { primary = { Enum.PowerType.Energy }, secondary = { "STAGGER" } }, -- Brewmaster
+        [269] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.Chi } }, -- Windwalker
+        [270] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Mistweaver
+    },
+    PALADIN = {
+        [65] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.HolyPower } }, -- Holy
+        [66] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.HolyPower } }, -- Protection
+        [70] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.HolyPower } }, -- Retribution
+    },
+    PRIEST = {
+        [256] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Discipline
+        [257] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Holy
+        [258] = { primary = { Enum.PowerType.Insanity }, secondary = { Enum.PowerType.Mana } }, -- Shadow
+    },
+    ROGUE = {
+        [259] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Assassination
+        [260] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Outlaw
+        [261] = { primary = { Enum.PowerType.Energy }, secondary = { Enum.PowerType.ComboPoints } }, -- Subtlety
+    },
+    SHAMAN = {
+        [262] = { primary = { Enum.PowerType.Maelstrom }, secondary = { Enum.PowerType.Mana } }, -- Elemental
+        [263] = { primary = { Enum.PowerType.Mana }, secondary = { "MAELSTROM_WEAPON" } }, -- Enhancement
+        [264] = { primary = { Enum.PowerType.Mana }, secondary = {} }, -- Restoration
+    },
+    WARLOCK = {
+        [265] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.SoulShards } }, -- Affliction
+        [266] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.SoulShards } }, -- Demonology
+        [267] = { primary = { Enum.PowerType.Mana }, secondary = { Enum.PowerType.SoulShards } }, -- Destruction
+    },
+    WARRIOR = {
+        [71] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Arms
+        [72] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Fury
+        [73] = { primary = { Enum.PowerType.Rage }, secondary = {} }, -- Protection
+    },
+}
+
+local function GetPowerTypeLabel(resource)
+    if POWER_TYPE_LABELS[resource] then
+        return POWER_TYPE_LABELS[resource]
+    end
+    if type(resource) == "number" then
+        for name, value in pairs(Enum.PowerType) do
+            if value == resource then
+                local label = name:gsub("(%u)", " %1"):gsub("^%s+", "")
+                return label
+            end
+        end
+    end
+    return tostring(resource)
+end
+
+local function GetResourceKey(resource)
+    if type(resource) == "string" then
+        return resource
+    end
+    if type(resource) == "number" then
+        return tostring(resource)
+    end
+    return tostring(resource)
+end
+
+local function GetSpecName(specID)
+    local name = select(2, GetSpecializationInfoByID(specID))
+    if name and name ~= "" then
+        return name
+    end
+    return "Spec " .. tostring(specID)
+end
+
+local function GetClassName(classFile)
+    return LOCALIZED_CLASS_NAMES_MALE[classFile]
+        or LOCALIZED_CLASS_NAMES_FEMALE[classFile]
+        or classFile
+end
 
 local function GetViewerOptions()
     return {
@@ -13,11 +166,146 @@ local function GetViewerOptions()
     }
 end
 
+local function CreateResourceAssignmentOptions()
+    local classSpecResources = (NephUI.ResourceBars and NephUI.ResourceBars.classSpecResources) or CLASS_SPEC_RESOURCES
+    if not classSpecResources then
+        return {
+            type = "group",
+            name = "Assignments",
+            order = 4,
+            args = {
+                missing = {
+                    type = "description",
+                    name = "Resource assignment data is not available yet. Please reload the UI.",
+                    order = 1,
+                },
+            },
+        }
+    end
+
+    local function GetAssignment(classFile, specID, resource)
+        local assignments = NephUI.db.profile.resourceBarAssignments
+        local classAssignments = assignments and assignments[classFile]
+        local specAssignments = classAssignments and classAssignments[specID]
+        local resourceKey = GetResourceKey(resource)
+        local assigned = specAssignments and (specAssignments[resourceKey] or specAssignments[resource])
+        if assigned and specAssignments and specAssignments[resource] and not specAssignments[resourceKey] then
+            specAssignments[resourceKey] = specAssignments[resource]
+            specAssignments[resource] = nil
+        end
+        if assigned == "primary" or assigned == "secondary" or assigned == "hide" then
+            return assigned
+        end
+        if NephUI.ResourceBars and NephUI.ResourceBars.GetDefaultBarAssignment then
+            return NephUI.ResourceBars.GetDefaultBarAssignment(classFile, specID, resource)
+        end
+        return "primary"
+    end
+
+    local function SetAssignment(classFile, specID, resource, value)
+        local assignments = NephUI.db.profile.resourceBarAssignments
+        if not assignments then
+            NephUI.db.profile.resourceBarAssignments = {}
+            assignments = NephUI.db.profile.resourceBarAssignments
+        end
+        assignments[classFile] = assignments[classFile] or {}
+        assignments[classFile][specID] = assignments[classFile][specID] or {}
+        assignments[classFile][specID][GetResourceKey(resource)] = value
+        NephUI:UpdatePowerBar()
+        NephUI:UpdateSecondaryPowerBar()
+    end
+
+    local args = {
+        info = {
+            type = "description",
+            name = "Assign each power type to Bar 1, Bar 2, or Hide for every class and spec.",
+            order = 1,
+        },
+    }
+
+    for classIndex, classFile in ipairs(CLASS_ORDER) do
+        local classData = classSpecResources[classFile]
+        if classData then
+            local classArgs = {}
+            for specID, specData in pairs(classData) do
+                local specArgs = {}
+                local order = 1
+                if specData.primary and #specData.primary > 0 then
+                    specArgs.primaryHeader = {
+                        type = "header",
+                        name = "Primary Power Types",
+                        order = order,
+                    }
+                    order = order + 1
+                    for _, resource in ipairs(specData.primary) do
+                        local resourceKey = "primary_" .. tostring(resource)
+                        specArgs[resourceKey] = {
+                            type = "select",
+                            name = GetPowerTypeLabel(resource),
+                            order = order,
+                            width = "normal",
+                            values = BAR_ASSIGNMENT_VALUES,
+                            get = function() return GetAssignment(classFile, specID, resource) end,
+                            set = function(_, val) SetAssignment(classFile, specID, resource, val) end,
+                        }
+                        order = order + 1
+                    end
+                end
+
+                if specData.secondary and #specData.secondary > 0 then
+                    specArgs.secondaryHeader = {
+                        type = "header",
+                        name = "Secondary Power Types",
+                        order = order,
+                    }
+                    order = order + 1
+                    for _, resource in ipairs(specData.secondary) do
+                        local resourceKey = "secondary_" .. tostring(resource)
+                        specArgs[resourceKey] = {
+                            type = "select",
+                            name = GetPowerTypeLabel(resource),
+                            order = order,
+                            width = "normal",
+                            values = BAR_ASSIGNMENT_VALUES,
+                            get = function() return GetAssignment(classFile, specID, resource) end,
+                            set = function(_, val) SetAssignment(classFile, specID, resource, val) end,
+                        }
+                        order = order + 1
+                    end
+                end
+
+                classArgs["spec_" .. tostring(specID)] = {
+                    type = "group",
+                    name = GetSpecName(specID),
+                    order = specID,
+                    args = specArgs,
+                }
+            end
+
+            args["class_" .. classFile] = {
+                type = "group",
+                name = GetClassName(classFile),
+                order = classIndex + 1,
+                childGroups = "tab",
+                args = classArgs,
+            }
+        end
+    end
+
+    return {
+        type = "group",
+        name = "Assignments",
+        order = 4,
+        childGroups = "tab",
+        args = args,
+    }
+end
+
 local function CreateResourceBarOptions()
     return {
         type = "group",
         name = L["Resource Bars"] or "Resource Bars",
-        order = 4,
+        order = 6,
         childGroups = "tab",
         args = {
             primary = {
@@ -262,6 +550,95 @@ local function CreateResourceBarOptions()
                             NephUI:UpdatePowerBar()
                         end,
                     },
+                    showManaPercentDecimal = {
+                        type = "toggle",
+                        name = "Show Mana Percent Decimal",
+                        desc = "Show one decimal place in mana percentage (94.3% vs 94%)",
+                        order = 32.5,
+                        width = "normal",
+                        get = function() return NephUI.db.profile.powerBar.showManaPercentDecimal end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.showManaPercentDecimal = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    textFormat = {
+                        type = "select",
+                        name = "Text Format",
+                        desc = "Formatting for resource text",
+                        order = 32.6,
+                        width = "normal",
+                        values = {
+                            ["Current"] = "Current",
+                            ["Current / Maximum"] = "Current / Maximum",
+                            ["Percent"] = "Percent",
+                            ["Percent%"] = "Percent%",
+                        },
+                        get = function()
+                            return NephUI.db.profile.powerBar.textFormat or "Current"
+                        end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.textFormat = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    textPrecision = {
+                        type = "select",
+                        name = "Percent Precision",
+                        desc = "Decimal precision for percent text",
+                        order = 32.7,
+                        width = "normal",
+                        values = {
+                            ["0"] = "0",
+                            ["0.0"] = "0.0",
+                            ["0.00"] = "0.00",
+                        },
+                        get = function()
+                            return NephUI.db.profile.powerBar.textPrecision or "0"
+                        end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.textPrecision = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    fragmentedPowerBarTextPrecision = {
+                        type = "select",
+                        name = "Fragment Timer Precision",
+                        desc = "Decimal precision for rune/essence timers",
+                        order = 32.8,
+                        width = "normal",
+                        values = {
+                            ["0"] = "0",
+                            ["0.0"] = "0.0",
+                            ["0.00"] = "0.00",
+                        },
+                        get = function()
+                            return NephUI.db.profile.powerBar.fragmentedPowerBarTextPrecision or "0.0"
+                        end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.fragmentedPowerBarTextPrecision = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    chargedColor = {
+                        type = "color",
+                        name = "Charged Segment Color",
+                        desc = "Overlay color for charged power points",
+                        order = 32.9,
+                        width = "normal",
+                        hasAlpha = true,
+                        get = function()
+                            local c = NephUI.db.profile.powerBar.chargedColor
+                            if c then
+                                return c[1], c[2], c[3], c[4] or 1
+                            end
+                            return 0.22, 0.62, 1.0, 0.8
+                        end,
+                        set = function(_, r, g, b, a)
+                            NephUI.db.profile.powerBar.chargedColor = { r, g, b, a }
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
                     showTicks = {
                         type = "toggle",
                         name = L["Show Ticks"] or "Show Ticks",
@@ -271,6 +648,62 @@ local function CreateResourceBarOptions()
                         get = function() return NephUI.db.profile.powerBar.showTicks end,
                         set = function(_, val)
                             NephUI.db.profile.powerBar.showTicks = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    fragmentTimerHeader = {
+                        type = "header",
+                        name = "Fragment Timer Options",
+                        order = 39,
+                    },
+                    showFragmentedPowerBarText = {
+                        type = "toggle",
+                        name = "Show Fragment Timers",
+                        desc = "Show cooldown timers on fragmented resources like runes or essence",
+                        order = 40,
+                        width = "normal",
+                        get = function() return NephUI.db.profile.powerBar.showFragmentedPowerBarText end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.showFragmentedPowerBarText = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    runeTimerTextSize = {
+                        type = "range",
+                        name = "Fragment Timer Text Size",
+                        desc = "Font size for fragment timer text",
+                        order = 41,
+                        width = "normal",
+                        min = 6, max = 24, step = 1,
+                        get = function() return NephUI.db.profile.powerBar.runeTimerTextSize end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.runeTimerTextSize = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    runeTimerTextX = {
+                        type = "range",
+                        name = "Fragment Timer Text X Position",
+                        desc = "Horizontal offset for fragment timer text",
+                        order = 42,
+                        width = "normal",
+                        min = -50, max = 50, step = 1,
+                        get = function() return NephUI.db.profile.powerBar.runeTimerTextX end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.runeTimerTextX = val
+                            NephUI:UpdatePowerBar()
+                        end,
+                    },
+                    runeTimerTextY = {
+                        type = "range",
+                        name = "Fragment Timer Text Y Position",
+                        desc = "Vertical offset for fragment timer text",
+                        order = 43,
+                        width = "normal",
+                        min = -50, max = 50, step = 1,
+                        get = function() return NephUI.db.profile.powerBar.runeTimerTextY end,
+                        set = function(_, val)
+                            NephUI.db.profile.powerBar.runeTimerTextY = val
                             NephUI:UpdatePowerBar()
                         end,
                     },
@@ -582,6 +1015,95 @@ local function CreateResourceBarOptions()
                             NephUI:UpdateSecondaryPowerBar()
                         end,
                     },
+                    showManaPercentDecimal = {
+                        type = "toggle",
+                        name = "Show Mana Percent Decimal",
+                        desc = "Show one decimal place in mana percentage (94.3% vs 94%)",
+                        order = 31.6,
+                        width = "normal",
+                        get = function() return NephUI.db.profile.secondaryPowerBar.showManaPercentDecimal end,
+                        set = function(_, val)
+                            NephUI.db.profile.secondaryPowerBar.showManaPercentDecimal = val
+                            NephUI:UpdateSecondaryPowerBar()
+                        end,
+                    },
+                    textFormat = {
+                        type = "select",
+                        name = "Text Format",
+                        desc = "Formatting for resource text",
+                        order = 31.7,
+                        width = "normal",
+                        values = {
+                            ["Current"] = "Current",
+                            ["Current / Maximum"] = "Current / Maximum",
+                            ["Percent"] = "Percent",
+                            ["Percent%"] = "Percent%",
+                        },
+                        get = function()
+                            return NephUI.db.profile.secondaryPowerBar.textFormat or "Current"
+                        end,
+                        set = function(_, val)
+                            NephUI.db.profile.secondaryPowerBar.textFormat = val
+                            NephUI:UpdateSecondaryPowerBar()
+                        end,
+                    },
+                    textPrecision = {
+                        type = "select",
+                        name = "Percent Precision",
+                        desc = "Decimal precision for percent text",
+                        order = 31.8,
+                        width = "normal",
+                        values = {
+                            ["0"] = "0",
+                            ["0.0"] = "0.0",
+                            ["0.00"] = "0.00",
+                        },
+                        get = function()
+                            return NephUI.db.profile.secondaryPowerBar.textPrecision or "0"
+                        end,
+                        set = function(_, val)
+                            NephUI.db.profile.secondaryPowerBar.textPrecision = val
+                            NephUI:UpdateSecondaryPowerBar()
+                        end,
+                    },
+                    fragmentedPowerBarTextPrecision = {
+                        type = "select",
+                        name = "Fragment Timer Precision",
+                        desc = "Decimal precision for rune/essence timers",
+                        order = 31.9,
+                        width = "normal",
+                        values = {
+                            ["0"] = "0",
+                            ["0.0"] = "0.0",
+                            ["0.00"] = "0.00",
+                        },
+                        get = function()
+                            return NephUI.db.profile.secondaryPowerBar.fragmentedPowerBarTextPrecision or "0.0"
+                        end,
+                        set = function(_, val)
+                            NephUI.db.profile.secondaryPowerBar.fragmentedPowerBarTextPrecision = val
+                            NephUI:UpdateSecondaryPowerBar()
+                        end,
+                    },
+                    chargedColor = {
+                        type = "color",
+                        name = "Charged Segment Color",
+                        desc = "Overlay color for charged power points",
+                        order = 31.95,
+                        width = "normal",
+                        hasAlpha = true,
+                        get = function()
+                            local c = NephUI.db.profile.secondaryPowerBar.chargedColor
+                            if c then
+                                return c[1], c[2], c[3], c[4] or 1
+                            end
+                            return 0.22, 0.62, 1.0, 0.8
+                        end,
+                        set = function(_, r, g, b, a)
+                            NephUI.db.profile.secondaryPowerBar.chargedColor = { r, g, b, a }
+                            NephUI:UpdateSecondaryPowerBar()
+                        end,
+                    },
                     showTicks = {
                         type = "toggle",
                         name = "Show Ticks",
@@ -660,14 +1182,14 @@ local function CreateResourceBarOptions()
                     
                     runeTimerHeader = {
                         type = "header",
-                        name = "Rune Timer Options",
-                        order = 40,
+                        name = "Fragment Timer Options",
+                        order = 39,
                     },
                     showFragmentedPowerBarText = {
                         type = "toggle",
-                        name = "Show Rune Timers",
-                        desc = "Show cooldown timers on individual runes (Death Knight only)",
-                        order = 41,
+                        name = "Show Fragment Timers",
+                        desc = "Show cooldown timers on fragmented resources like runes or essence",
+                        order = 40,
                         width = "normal",
                         get = function() return NephUI.db.profile.secondaryPowerBar.showFragmentedPowerBarText end,
                         set = function(_, val)
@@ -677,9 +1199,9 @@ local function CreateResourceBarOptions()
                     },
                     runeTimerTextSize = {
                         type = "range",
-                        name = "Rune Timer Text Size",
-                        desc = "Font size for the rune timer text",
-                        order = 42,
+                        name = "Fragment Timer Text Size",
+                        desc = "Font size for fragment timer text",
+                        order = 41,
                         width = "normal",
                         min = 6, max = 24, step = 1,
                         get = function() return NephUI.db.profile.secondaryPowerBar.runeTimerTextSize end,
@@ -690,9 +1212,9 @@ local function CreateResourceBarOptions()
                     },
                     runeTimerTextX = {
                         type = "range",
-                        name = "Rune Timer Text X Position",
-                        desc = "Horizontal offset for the rune timer text",
-                        order = 43,
+                        name = "Fragment Timer Text X Position",
+                        desc = "Horizontal offset for fragment timer text",
+                        order = 42,
                         width = "normal",
                         min = -50, max = 50, step = 1,
                         get = function() return NephUI.db.profile.secondaryPowerBar.runeTimerTextX end,
@@ -703,9 +1225,9 @@ local function CreateResourceBarOptions()
                     },
                     runeTimerTextY = {
                         type = "range",
-                        name = "Rune Timer Text Y Position",
-                        desc = "Vertical offset for the rune timer text",
-                        order = 44,
+                        name = "Fragment Timer Text Y Position",
+                        desc = "Vertical offset for fragment timer text",
+                        order = 43,
                         width = "normal",
                         min = -50, max = 50, step = 1,
                         get = function() return NephUI.db.profile.secondaryPowerBar.runeTimerTextY end,
@@ -1169,6 +1691,7 @@ local function CreateResourceBarOptions()
                     },
                 },
             },
+            assignments = CreateResourceAssignmentOptions(),
         },
     }
 end

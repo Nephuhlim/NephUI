@@ -623,6 +623,11 @@ end
 
 -- Initialize function
 function Chat:Initialize()
+    if self.initialized then
+        return
+    end
+    self.initialized = true
+    
     -- Wait a bit for chat frames to be fully loaded
     C_Timer.After(0.5, function()
         self:SkinAllChatFrames()

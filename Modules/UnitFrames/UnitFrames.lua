@@ -270,7 +270,8 @@ function UF:GetFakeBossData(bossIndex)
         power = math.random(20, 90),
         maxPower = 100,
         powerType = PowerTypes[bossIndex] or 0,
-        portraitIndex = bossIndex
+        portraitIndex = bossIndex,
+        raidTargetIndex = (bossIndex <= 8) and bossIndex or nil -- Show raid markers 1-8 on bosses 1-8
     }
 end
 
@@ -465,6 +466,44 @@ function UF:ApplyBossPreviewData(unitFrame, bossIndex)
     elseif unitFrame.TargetIndicator then
         unitFrame.TargetIndicator:Hide()
     end
+    
+    -- Handle raid target icon (show fake markers in preview mode)
+    if unitFrame.raidTargetIcon and bossDB.RaidTargetIcon then
+        local RaidTargetDB = bossDB.RaidTargetIcon
+        if RaidTargetDB.Enabled then
+            if fakeData.raidTargetIndex then
+                -- Show fake raid marker in preview mode
+                unitFrame.raidTargetIcon.texture:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+                SetRaidTargetIconTexture(unitFrame.raidTargetIcon.texture, fakeData.raidTargetIndex)
+                
+                -- Apply positioning
+                local scale = RaidTargetDB.Scale or 1.0
+                local anchorFrom = RaidTargetDB.AnchorFrom or "TOP"
+                local anchorTo = RaidTargetDB.AnchorTo or "TOP"
+                local x = RaidTargetDB.OffsetX or 0
+                local y = RaidTargetDB.OffsetY or 2
+                
+                local size = 16 * scale
+                unitFrame.raidTargetIcon:SetSize(size, size)
+                unitFrame.raidTargetIcon:ClearAllPoints()
+                unitFrame.raidTargetIcon:SetPoint(anchorFrom, unitFrame, anchorTo, x, y)
+                
+                -- Apply frame level
+                local frameLevel = RaidTargetDB.FrameLevel or 0
+                if frameLevel > 0 then
+                    unitFrame.raidTargetIcon:SetFrameLevel(unitFrame:GetFrameLevel() + frameLevel)
+                end
+                
+                unitFrame.raidTargetIcon:Show()
+            else
+                unitFrame.raidTargetIcon:Hide()
+            end
+        else
+            unitFrame.raidTargetIcon:Hide()
+        end
+    elseif unitFrame.raidTargetIcon then
+        unitFrame.raidTargetIcon:Hide()
+    end
 end
 
 function UF:ShowBossFramesPreview()
@@ -480,7 +519,9 @@ function UF:ShowBossFramesPreview()
         local unitFrame = _G["NephUI_Boss" .. i]
         if unitFrame then
             -- Unregister unit events to prevent real unit data from overriding
-            UnregisterUnitWatch(unitFrame)
+            if not InCombatLockdown() then
+                UnregisterUnitWatch(unitFrame)
+            end
 
             -- Set fake unit data
             unitFrame.unit = "boss" .. i
@@ -656,8 +697,10 @@ function UF:HideBossFramesPreview()
         local unitFrame = _G["NephUI_Boss" .. i]
         if unitFrame then
             -- Re-register unit watch so frames hide when no real bosses
-            RegisterUnitWatch(unitFrame, false)
-            unitFrame.__nephuiUnitWatchActive = true
+            if not InCombatLockdown() then
+                RegisterUnitWatch(unitFrame, false)
+                unitFrame.__nephuiUnitWatchActive = true
+            end
             unitFrame:Hide()
         end
 

@@ -14,6 +14,48 @@ local function IsCooldownIconFrame(frame)
     return frame and (frame.icon or frame.Icon) and frame.Cooldown
 end
 
+-- Update our layout after CooldownViewerSettings is shown or closed (login, /cdm, or player_entering_world).
+local function EnsureCooldownViewerSettingsLayoutHook()
+    if IconViewers.__cdmSettingsLayoutHooked then return end
+    local settingsFrame = _G["CooldownViewerSettings"]
+    if not settingsFrame then return end
+    IconViewers.__cdmSettingsLayoutHooked = true
+    settingsFrame:HookScript("OnShow", function()
+        C_Timer.After(0.05, function()
+            IconViewers:RefreshAll()
+            if not InCombatLockdown() and IconViewers.ProcessPendingIcons then
+                IconViewers:ProcessPendingIcons()
+            end
+        end)
+    end)
+    settingsFrame:HookScript("OnHide", function()
+        C_Timer.After(0.05, function()
+            IconViewers:RefreshAll()
+            if not InCombatLockdown() and IconViewers.ProcessPendingIcons then
+                IconViewers:ProcessPendingIcons()
+            end
+        end)
+    end)
+end
+
+-- Refresh layout upon PLAYER_ENTERING_WORLD (after loading screen).
+local function EnsurePlayerEnteringWorldRefresh()
+    if IconViewers.__cdmEnteringWorldRegistered then return end
+    IconViewers.__cdmEnteringWorldRegistered = true
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_ENTERING_WORLD" then
+            C_Timer.After(0.1, function()
+                IconViewers:RefreshAll()
+                if not InCombatLockdown() and IconViewers.ProcessPendingIcons then
+                    IconViewers:ProcessPendingIcons()
+                end
+            end)
+        end
+    end)
+end
+
 function IconViewers:ApplyViewerSkin(viewer)
     if not viewer or not viewer.GetName then return end
     local name     = viewer:GetName()
@@ -154,24 +196,25 @@ function IconViewers:HookViewers()
                 end
             end)
 
+            -- Blizzard Cooldown Viewer API: RefreshLayout() is called when the viewer layout updates
+            -- (e.g. after changing spells in Cooldown Manager). Re-apply our layout and skinning.
+            hooksecurefunc(viewer, "RefreshLayout", function()
+                if not viewer:IsShown() then return end
+                C_Timer.After(0, function()
+                    if viewer:IsShown() then
+                        IconViewers:ApplyViewerSkin(viewer)
+                    end
+                end)
+            end)
+
             -- Event-based updates instead of OnUpdate for better performance
             if name == "BuffIconCooldownViewer" then
-                -- Buff viewer: hook into UNIT_AURA events for immediate updates
-                if not viewer.__cdmAuraHook then
-                    viewer.__cdmAuraHook = CreateFrame("Frame")
-                    viewer.__cdmAuraHook:RegisterEvent("UNIT_AURA")
-                    viewer.__cdmAuraHook:SetScript("OnEvent", function(_, event, unit)
-                        if unit == "player" and viewer:IsShown() then
-                            -- Throttled rescan to avoid spam
-                            if not viewer.__cdmRescanPending then
-                                viewer.__cdmRescanPending = true
-                                C_Timer.After(0.1, function()
-                                    viewer.__cdmRescanPending = nil
-                                    if viewer:IsShown() and IconViewers.RescanViewer then
-                                        IconViewers:RescanViewer(viewer)
-                                    end
-                                end)
-                            end
+                -- Buff viewer: refresh when Blizzard aura events fire on icon frames
+                if not viewer.__cdmBuffIconOnShowHook then
+                    viewer.__cdmBuffIconOnShowHook = true
+                    viewer:HookScript("OnShow", function()
+                        if IconViewers.RescanViewer then
+                            IconViewers:RescanViewer(viewer)
                         end
                     end)
                 end
@@ -185,6 +228,16 @@ function IconViewers:HookViewers()
                         IconViewers:ProcessPendingIcons()
                     end
                 end)
+
+                -- 0.5s ticker: BuffIconCooldownViewer only (no global RefreshAll / other viewers)
+                if not viewer.__cdmLayoutTicker then
+                    viewer.__cdmLayoutTicker = C_Timer.NewTicker(0.5, function()
+                        local buffViewer = _G["BuffIconCooldownViewer"]
+                        if buffViewer and buffViewer:IsShown() and IconViewers.RescanViewer then
+                            IconViewers:RescanViewer(buffViewer)
+                        end
+                    end)
+                end
             else
                 -- Other viewers: use SPELL_UPDATE_COOLDOWN and other events
                 if not viewer.__cdmCooldownHook then
@@ -222,6 +275,16 @@ function IconViewers:HookViewers()
             self:ApplyViewerSkin(viewer)
         end
     end
+
+    -- When CooldownViewerSettings is shown or closed (login or /cdm), update our layout.
+    EnsureCooldownViewerSettingsLayoutHook()
+    if not IconViewers.__cdmSettingsLayoutHooked then
+        C_Timer.After(0.5, EnsureCooldownViewerSettingsLayoutHook)
+        C_Timer.After(1.5, EnsureCooldownViewerSettingsLayoutHook)
+    end
+
+    -- Refresh layout upon PLAYER_ENTERING_WORLD (after loading screen / close CooldownViewerSettings).
+    EnsurePlayerEnteringWorldRefresh()
 end
 
 function IconViewers:ForceRefreshBuffIcons()
@@ -255,7 +318,7 @@ function IconViewers:AutoLoadBuffIcons(retryCount)
     viewer.__nephuiInitialLoading = true
     
     -- Open CooldownViewerSettings frame instead of showing BuffIconCooldownViewer
-    local settingsFrame = _G["BuffIconCooldownViewer"]
+    local settingsFrame = _G["CooldownViewerSettings"]
     if settingsFrame then
         settingsFrame:Show()
         settingsFrame:Raise()
@@ -263,7 +326,7 @@ function IconViewers:AutoLoadBuffIcons(retryCount)
         if not settingsFrame.__nephuiLayoutHook then
             settingsFrame.__nephuiLayoutHook = true
             settingsFrame:HookScript("OnHide", function()
-                local buffViewer = _G["BuffIconCooldownViewer"]
+                local buffViewer = _G["CooldownViewerSettings"]
                 if buffViewer and buffViewer:IsShown() and IconViewers.ApplyViewerLayout then
                     -- Delay slightly so the hide completes before relayout
                     C_Timer.After(0.05, function()
@@ -351,12 +414,12 @@ function IconViewers:AutoLoadBuffIcons(retryCount)
         
         -- Hide CooldownViewerSettings frame after a couple seconds
         C_Timer.After(2.0, function()
-            local settingsFrame = _G["BuffIconCooldownViewer"]
+            local settingsFrame = _G["CooldownViewerSettings"]
             if settingsFrame and settingsFrame:IsShown() then
                 settingsFrame:Hide()
             elseif not settingsFrame then
                 -- If the frame vanished, still attempt a delayed relayout
-                local buffViewer = _G["BuffIconCooldownViewer"]
+                local buffViewer = _G["CooldownViewerSettings"]
                 if buffViewer and buffViewer:IsShown() and IconViewers.ApplyViewerLayout and not InCombatLockdown() then
                     C_Timer.After(0.05, function()
                         if buffViewer and buffViewer:IsShown() and IconViewers.ApplyViewerLayout and not InCombatLockdown() then

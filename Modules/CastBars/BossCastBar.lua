@@ -164,12 +164,17 @@ function CastBars:UpdateBossCastBarLayout(bossIndex)
     bar.status:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
     bar.bg:SetAllPoints(bar.status)
 
+    local nameOffsetX = cfg.nameOffsetX or 0
+    local nameOffsetY = cfg.nameOffsetY or 0
+    local timeOffsetX = cfg.timeOffsetX or 0
+    local timeOffsetY = cfg.timeOffsetY or 0
+
     -- Position text (match target/focus cast bars)
     bar.spellName:ClearAllPoints()
-    bar.spellName:SetPoint("LEFT", bar.status, "LEFT", NephUI:Scale(4), 0)
+    bar.spellName:SetPoint("LEFT", bar.status, "LEFT", NephUI:Scale(4 + nameOffsetX), NephUI:Scale(nameOffsetY))
 
     bar.timeText:ClearAllPoints()
-    bar.timeText:SetPoint("RIGHT", bar.status, "RIGHT", NephUI:Scale(-4), 0)
+    bar.timeText:SetPoint("RIGHT", bar.status, "RIGHT", NephUI:Scale(-4 + timeOffsetX), NephUI:Scale(timeOffsetY))
 
     -- Show/hide time text based on setting
     if cfg.showTimeText ~= false then

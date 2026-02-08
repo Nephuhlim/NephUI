@@ -2504,7 +2504,7 @@ local function CreateUnitFrameOptionsGroup()
     return {
         type = "group",
         name = "Unit Frames",
-        order = 7,
+        order = 9,
         childGroups = "tab",
         args = {
             -- General Settings Tab

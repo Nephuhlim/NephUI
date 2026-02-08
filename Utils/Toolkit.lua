@@ -1,237 +1,226 @@
 local ADDON_NAME, ns = ...
 local NephUI = ns.Addon
 
-if not NephUI then
-	error("NephUI not found! Toolkit.lua must load after Main.lua")
+if not NephUI or not NephUI.Scale then
+	error("NephUI and NephUI:Scale must be available. Load Toolkit after PixelPerfect.")
 end
 
 local _G = _G
 local type = type
+local next = next
 local getmetatable = getmetatable
 local hooksecurefunc = hooksecurefunc
 local tonumber = tonumber
-
-local EnumerateFrames = EnumerateFrames
+local pcall = pcall
 local CreateFrame = CreateFrame
+local EnumerateFrames = EnumerateFrames
 
-local issecurevalue = issecurevalue
-
-local function CanAccessFrame(frame)
-	if not frame then
-		return false
+-- True if we can safely read/call on this frame (not secure, not forbidden).
+local function frame_ok(f)
+	if not f then return false end
+	if issecurevalue and issecurevalue(f) then return false end
+	if f.IsForbidden then
+		local ok, forbidden = pcall(f.IsForbidden, f)
+		if not ok or forbidden then return false end
 	end
-
-	if issecurevalue and issecurevalue(frame) then
-		return false
-	end
-
-	if frame.IsForbidden then
-		local ok, forbidden = pcall(frame.IsForbidden, frame)
-		if not ok or forbidden then
-			return false
-		end
-	end
-
 	return true
 end
 
-local function WatchPixelSnap(frame, snap)
-	if not CanAccessFrame(frame) then
-		return
-	end
-
-	if frame.PixelSnapDisabled and snap then
-		frame.PixelSnapDisabled = nil
+-- When Blizzard re-enables pixel snap, clear our marker so we can disable again if needed.
+local function on_pixel_snap_enabled(f, snap)
+	if not frame_ok(f) then return end
+	if f._nephui_no_pixel_snap and snap then
+		f._nephui_no_pixel_snap = nil
 	end
 end
 
-local function DisablePixelSnap(frame)
-	if not CanAccessFrame(frame) then
-		return
-	end
-
-	if not frame.PixelSnapDisabled then
-		if frame.SetSnapToPixelGrid then
-			frame:SetSnapToPixelGrid(false)
-			frame:SetTexelSnappingBias(0)
-		elseif frame.GetStatusBarTexture then
-			local texture = frame:GetStatusBarTexture()
-			if type(texture) == 'table' and texture.SetSnapToPixelGrid then
-				texture:SetSnapToPixelGrid(false)
-				texture:SetTexelSnappingBias(0)
-			end
+-- Turn off Blizzard's pixel grid on this frame/texture so our global scale controls sharpness.
+local function turn_off_pixel_snap(f)
+	if not frame_ok(f) or f._nephui_no_pixel_snap then return end
+	if f.SetSnapToPixelGrid then
+		f:SetSnapToPixelGrid(false)
+		if f.SetTexelSnappingBias then f:SetTexelSnappingBias(0) end
+	elseif f.GetStatusBarTexture then
+		local tex = f:GetStatusBarTexture()
+		if type(tex) == "table" and tex.SetSnapToPixelGrid then
+			tex:SetSnapToPixelGrid(false)
+			if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 		end
-
-		frame.PixelSnapDisabled = true
 	end
+	f._nephui_no_pixel_snap = true
 end
 
-local function Size(frame, width, height, ...)
-	local w = NephUI:Scale(width)
-	frame:SetSize(w, (height and NephUI:Scale(height)) or w, ...)
+-- Scale a numeric value via NephUI (pixel rounding).
+local function scale(x, no_scale)
+	if no_scale or x == nil then return x end
+	return NephUI:Scale(x)
 end
 
-local function Width(frame, width, ...)
-	frame:SetWidth(NephUI:Scale(width), ...)
+-- Some frames (e.g. restricted) don't allow GetPoint; detect that.
+local function points_restricted(f)
+	if not f then return true end
+	local ok = pcall(f.GetPoint, f)
+	return not ok
 end
 
-local function Height(frame, height, ...)
-	frame:SetHeight(NephUI:Scale(height), ...)
+-- Apply scaled size: (w) or (w, h). If h omitted, square.
+local function api_size(f, w, h, ...)
+	local sw = NephUI:Scale(w)
+	f:SetSize(sw, (h ~= nil and NephUI:Scale(h)) or sw, ...)
 end
 
-local function Point(obj, arg1, arg2, arg3, arg4, arg5, ...)
+local function api_width(f, w, ...)
+	f:SetWidth(NephUI:Scale(w), ...)
+end
+
+local function api_height(f, h, ...)
+	f:SetHeight(NephUI:Scale(h), ...)
+end
+
+-- SetPoint with numeric args scaled (anchor, relativeTo, relativePoint, x, y).
+local function api_point(obj, arg1, arg2, arg3, arg4, arg5, ...)
 	if not arg2 then arg2 = obj:GetParent() end
-
-	if type(arg2)=='number' then arg2 = NephUI:Scale(arg2) end
-	if type(arg3)=='number' then arg3 = NephUI:Scale(arg3) end
-	if type(arg4)=='number' then arg4 = NephUI:Scale(arg4) end
-	if type(arg5)=='number' then arg5 = NephUI:Scale(arg5) end
-
+	if type(arg2) == "number" then arg2 = NephUI:Scale(arg2) end
+	if type(arg3) == "number" then arg3 = NephUI:Scale(arg3) end
+	if type(arg4) == "number" then arg4 = NephUI:Scale(arg4) end
+	if type(arg5) == "number" then arg5 = NephUI:Scale(arg5) end
 	obj:SetPoint(arg1, arg2, arg3, arg4, arg5, ...)
 end
 
-local function GrabPoint(obj, pointValue)
-	if type(pointValue) == 'string' then
-		local pointIndex = tonumber(pointValue)
-		if not pointIndex then
+-- Get point by 1-based index or by anchor name (e.g. "TOPLEFT").
+local function api_grab_point(obj, index_or_name)
+	if type(index_or_name) == "string" then
+		local num = tonumber(index_or_name)
+		if not num then
 			for i = 1, obj:GetNumPoints() do
-				local point, relativeTo, relativePoint, xOfs, yOfs = obj:GetPoint(i)
-				if not point then
-					break
-				elseif point == pointValue then
-					return point, relativeTo, relativePoint, xOfs, yOfs
+				local anchor, rel_to, rel_anchor, x, y = obj:GetPoint(i)
+				if anchor == index_or_name then
+					return anchor, rel_to, rel_anchor, x, y
 				end
 			end
+			return nil
 		end
-
-		pointValue = pointIndex
+		index_or_name = num
 	end
-
-	return obj:GetPoint(pointValue)
+	return obj:GetPoint(index_or_name)
 end
 
-local function SetPointsRestricted(frame)
-	if frame and not pcall(frame.GetPoint, frame) then
-		return true
-	end
-end
-
-local function NudgePoint(obj, xAxis, yAxis, noScale, pointValue, clearPoints)
-	if not xAxis then xAxis = 0 end
-	if not yAxis then yAxis = 0 end
-
-	local x = (noScale and xAxis) or NephUI:Scale(xAxis)
-	local y = (noScale and yAxis) or NephUI:Scale(yAxis)
-
-	local point, relativeTo, relativePoint, xOfs, yOfs = GrabPoint(obj, pointValue)
-
-	if clearPoints or SetPointsRestricted(obj) then
+-- Nudge existing point by (xAxis, yAxis); optionally clear points first.
+local function api_nudge_point(obj, x_axis, y_axis, no_scale, point_index, clear_first)
+	x_axis = x_axis or 0
+	y_axis = y_axis or 0
+	local dx = scale(x_axis, no_scale)
+	local dy = scale(y_axis, no_scale)
+	local anchor, rel_to, rel_anchor, x_ofs, y_ofs = api_grab_point(obj, point_index)
+	if clear_first or points_restricted(obj) then
 		obj:ClearAllPoints()
 	end
-
-	obj:SetPoint(point, relativeTo, relativePoint, xOfs + x, yOfs + y)
+	obj:SetPoint(anchor, rel_to, rel_anchor, x_ofs + dx, y_ofs + dy)
 end
 
-local function PointXY(obj, xOffset, yOffset, noScale, pointValue, clearPoints)
-	local x = xOffset and ((noScale and xOffset) or NephUI:Scale(xOffset))
-	local y = yOffset and ((noScale and yOffset) or NephUI:Scale(yOffset))
-
-	local point, relativeTo, relativePoint, xOfs, yOfs = GrabPoint(obj, pointValue)
-
-	if clearPoints or SetPointsRestricted(obj) then
+-- Set position by absolute x/y offsets for current anchor.
+local function api_point_xy(obj, x_ofs, y_ofs, no_scale, point_index, clear_first)
+	local x = (x_ofs ~= nil) and (scale(x_ofs, no_scale) or x_ofs) or nil
+	local y = (y_ofs ~= nil) and (scale(y_ofs, no_scale) or y_ofs) or nil
+	local anchor, rel_to, rel_anchor, cur_x, cur_y = api_grab_point(obj, point_index)
+	if clear_first or points_restricted(obj) then
 		obj:ClearAllPoints()
 	end
-
-	obj:SetPoint(point, relativeTo, relativePoint, x or xOfs, y or yOfs)
+	obj:SetPoint(anchor, rel_to, rel_anchor, x or cur_x, y or cur_y)
 end
 
-local function SetOutside(obj, anchor, xOffset, yOffset, anchor2, noScale)
-	if not anchor then anchor = obj:GetParent() end
-
-	if not xOffset then xOffset = 1 end
-	if not yOffset then yOffset = 1 end
-	local x = (noScale and xOffset) or NephUI:Scale(xOffset)
-	local y = (noScale and yOffset) or NephUI:Scale(yOffset)
-
-	if SetPointsRestricted(obj) or obj:GetPoint() then
+-- Anchor frame outside another (expand by offset).
+local function api_set_outside(obj, anchor, x_off, y_off, anchor2, no_scale)
+	anchor = anchor or obj:GetParent()
+	x_off = x_off or 1
+	y_off = y_off or 1
+	local x = scale(x_off, no_scale)
+	local y = scale(y_off, no_scale)
+	if points_restricted(obj) or obj:GetPoint() then
 		obj:ClearAllPoints()
 	end
-
-	DisablePixelSnap(obj)
-	obj:SetPoint('TOPLEFT', anchor, 'TOPLEFT', -x, y)
-	obj:SetPoint('BOTTOMRIGHT', anchor2 or anchor, 'BOTTOMRIGHT', x, -y)
+	turn_off_pixel_snap(obj)
+	obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", -x, y)
+	obj:SetPoint("BOTTOMRIGHT", anchor2 or anchor, "BOTTOMRIGHT", x, -y)
 end
 
-local function SetInside(obj, anchor, xOffset, yOffset, anchor2, noScale)
-	if not anchor then anchor = obj:GetParent() end
-
-	if not xOffset then xOffset = 1 end
-	if not yOffset then yOffset = 1 end
-	local x = (noScale and xOffset) or NephUI:Scale(xOffset)
-	local y = (noScale and yOffset) or NephUI:Scale(yOffset)
-
-	if SetPointsRestricted(obj) or obj:GetPoint() then
+-- Anchor frame inside another (inset by offset).
+local function api_set_inside(obj, anchor, x_off, y_off, anchor2, no_scale)
+	anchor = anchor or obj:GetParent()
+	x_off = x_off or 1
+	y_off = y_off or 1
+	local x = scale(x_off, no_scale)
+	local y = scale(y_off, no_scale)
+	if points_restricted(obj) or obj:GetPoint() then
 		obj:ClearAllPoints()
 	end
-
-	DisablePixelSnap(obj)
-	obj:SetPoint('TOPLEFT', anchor, 'TOPLEFT', x, -y)
-	obj:SetPoint('BOTTOMRIGHT', anchor2 or anchor, 'BOTTOMRIGHT', -x, y)
+	turn_off_pixel_snap(obj)
+	obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -y)
+	obj:SetPoint("BOTTOMRIGHT", anchor2 or anchor, "BOTTOMRIGHT", -x, y)
 end
 
-local API = {
-	Size = Size,
-	Point = Point,
-	Width = Width,
-	Height = Height,
-	PointXY = PointXY,
-	GrabPoint = GrabPoint,
-	NudgePoint = NudgePoint,
-	SetOutside = SetOutside,
-	SetInside = SetInside,
+local FRAME_API = {
+	Size = api_size,
+	Point = api_point,
+	Width = api_width,
+	Height = api_height,
+	PointXY = api_point_xy,
+	GrabPoint = api_grab_point,
+	NudgePoint = api_nudge_point,
+	SetOutside = api_set_outside,
+	SetInside = api_set_inside,
 }
 
-local function AddAPI(object)
-	local mk = getmetatable(object).__index
-	for method, func in next, API do
-		if not object[method] then
-			mk[method] = func
+-- Attach our API to a widget's metatable so new frames get these methods.
+local function mixin_api(widget)
+	local mt = getmetatable(widget)
+	if not mt or not mt.__index then return end
+	local idx = mt.__index
+	for name, fn in next, FRAME_API do
+		if not widget[name] then
+			idx[name] = fn
 		end
 	end
-
-	if not object.DisabledPixelSnap and (mk.SetSnapToPixelGrid or mk.SetStatusBarTexture or mk.SetColorTexture or mk.SetVertexColor or mk.CreateTexture or mk.SetTexCoord or mk.SetTexture) then
-		if mk.SetSnapToPixelGrid then hooksecurefunc(mk, 'SetSnapToPixelGrid', WatchPixelSnap) end
-		if mk.SetStatusBarTexture then hooksecurefunc(mk, 'SetStatusBarTexture', DisablePixelSnap) end
-		if mk.SetColorTexture then hooksecurefunc(mk, 'SetColorTexture', DisablePixelSnap) end
-		if mk.SetVertexColor then hooksecurefunc(mk, 'SetVertexColor', DisablePixelSnap) end
-		if mk.CreateTexture then hooksecurefunc(mk, 'CreateTexture', DisablePixelSnap) end
-		if mk.SetTexCoord then hooksecurefunc(mk, 'SetTexCoord', DisablePixelSnap) end
-		if mk.SetTexture then hooksecurefunc(mk, 'SetTexture', DisablePixelSnap) end
-
-		mk.DisabledPixelSnap = true
+	-- Disable Blizzard pixel snap on Frame/Texture/StatusBar so our scale wins.
+	local needs_snap_hooks = idx.SetSnapToPixelGrid or idx.SetStatusBarTexture or idx.SetColorTexture
+		or idx.SetVertexColor or idx.CreateTexture or idx.SetTexCoord or idx.SetTexture
+	if needs_snap_hooks and not idx._nephui_pixel_snap_done then
+		if idx.SetSnapToPixelGrid then hooksecurefunc(idx, "SetSnapToPixelGrid", on_pixel_snap_enabled) end
+		if idx.SetStatusBarTexture then hooksecurefunc(idx, "SetStatusBarTexture", turn_off_pixel_snap) end
+		if idx.SetColorTexture then hooksecurefunc(idx, "SetColorTexture", turn_off_pixel_snap) end
+		if idx.SetVertexColor then hooksecurefunc(idx, "SetVertexColor", turn_off_pixel_snap) end
+		if idx.CreateTexture then hooksecurefunc(idx, "CreateTexture", turn_off_pixel_snap) end
+		if idx.SetTexCoord then hooksecurefunc(idx, "SetTexCoord", turn_off_pixel_snap) end
+		if idx.SetTexture then hooksecurefunc(idx, "SetTexture", turn_off_pixel_snap) end
+		idx._nephui_pixel_snap_done = true
 	end
 end
 
-local handled = { Frame = true }
-local object = CreateFrame('Frame')
-AddAPI(object)
-AddAPI(object:CreateTexture())
-AddAPI(object:CreateFontString())
-if object.CreateMaskTexture then
-	AddAPI(object:CreateMaskTexture())
+-- Base frame and common subtypes
+local base = CreateFrame("Frame")
+mixin_api(base)
+mixin_api(base:CreateTexture())
+mixin_api(base:CreateFontString())
+if base.CreateMaskTexture then
+	mixin_api(base:CreateMaskTexture())
 end
 
-object = EnumerateFrames()
-while object do
-	local objType = object:GetObjectType()
-	if not object:IsForbidden() and not handled[objType] then
-		AddAPI(object)
-		handled[objType] = true
+-- All existing widget types (so future-created frames get the API)
+local seen = { Frame = true }
+local w = EnumerateFrames()
+while w do
+	if not w:IsForbidden() then
+		local kind = w:GetObjectType()
+		if not seen[kind] then
+			seen[kind] = true
+			mixin_api(w)
+		end
 	end
-
-	object = EnumerateFrames(object)
+	w = EnumerateFrames(w)
 end
 
-AddAPI(_G.GameFontNormal)
-AddAPI(CreateFrame('ScrollFrame'))
-
+-- Font objects and ScrollFrame (often don't inherit from base Frame)
+if _G.GameFontNormal then
+	mixin_api(_G.GameFontNormal)
+end
+mixin_api(CreateFrame("ScrollFrame"))

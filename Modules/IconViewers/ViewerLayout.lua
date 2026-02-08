@@ -90,6 +90,69 @@ local function IsPlaceholderIcon(iconFrame)
     return iconFrame.cooldownID == nil
 end
 
+-- BuffIconCooldownViewer may have icons as direct children or as grandchildren (e.g. inside a scroll frame).
+local function CollectBuffIconCooldownViewerIconsInternal(container, shownOnly)
+    local icons = {}
+    if not container or not container.GetNumChildren then return icons end
+    local n = container:GetNumChildren() or 0
+    for i = 1, n do
+        local child = select(i, container:GetChildren())
+        if not child then break end
+        if IsCooldownIconFrame(child) and not IsPlaceholderIcon(child) then
+            if not shownOnly or child:IsShown() then
+                table.insert(icons, child)
+            end
+        elseif child.GetNumChildren then
+            local m = child:GetNumChildren() or 0
+            for j = 1, m do
+                local grandchild = select(j, child:GetChildren())
+                if grandchild and IsCooldownIconFrame(grandchild) and not IsPlaceholderIcon(grandchild) then
+                    if not shownOnly or grandchild:IsShown() then
+                        table.insert(icons, grandchild)
+                    end
+                end
+            end
+        end
+    end
+    return icons
+end
+
+-- For layout: only shown, non-placeholder icons so CENTERED_HORIZONTAL and spacing are correct.
+local function CollectBuffIconCooldownViewerIcons(container)
+    return CollectBuffIconCooldownViewerIconsInternal(container, true)
+end
+
+local function HookBuffIconAuraEvents(viewer, iconFrame)
+    if not viewer or not iconFrame or iconFrame.__cdmAuraHooked then return end
+    iconFrame.__cdmAuraHooked = true
+
+    local function RequestRescan()
+        if not viewer:IsShown() or not IconViewers.RescanViewer then
+            return
+        end
+        if viewer.__cdmRescanPending then
+            return
+        end
+        viewer.__cdmRescanPending = true
+        C_Timer.After(0, function()
+            viewer.__cdmRescanPending = nil
+            if viewer:IsShown() and IconViewers.RescanViewer then
+                IconViewers:RescanViewer(viewer)
+            end
+        end)
+    end
+
+    if iconFrame.OnActiveStateChanged then
+        hooksecurefunc(iconFrame, "OnActiveStateChanged", RequestRescan)
+    end
+    if iconFrame.OnUnitAuraAddedEvent then
+        hooksecurefunc(iconFrame, "OnUnitAuraAddedEvent", RequestRescan)
+    end
+    if iconFrame.OnUnitAuraRemovedEvent then
+        hooksecurefunc(iconFrame, "OnUnitAuraRemovedEvent", RequestRescan)
+    end
+end
+
 local function NormalizeDirectionToken(token)
     if not token or token == "" then
         return nil
@@ -212,8 +275,12 @@ local function GetRowIconSize(settings, rowIndex)
     return nil
 end
 
-local function ComputeSpacing(settings)
+local function ComputeSpacing(settings, viewerName)
     local spacing = settings.spacing or 4
+    -- BuffIconCooldownViewer: use exact spacing (1 = 1 pixel) for CENTERED_HORIZONTAL layout
+    if viewerName == "BuffIconCooldownViewer" then
+        return PixelSnap(spacing)
+    end
     return PixelSnap(spacing + 2)
 end
 
@@ -460,14 +527,13 @@ function IconViewers:ApplyViewerLayout(viewer)
     TrackViewer(viewer)
 
     local container = viewer.viewerFrame or viewer
-    local icons = {}
-
-    for _, child in ipairs({ container:GetChildren() }) do
-        if IsCooldownIconFrame(child) and child:IsShown() then
-            -- Filter out placeholder icons for BuffIconCooldownViewer (those without cooldownID)
-            if name == "BuffIconCooldownViewer" and IsPlaceholderIcon(child) then
-                -- Skip placeholder icons
-            else
+    local icons
+    if name == "BuffIconCooldownViewer" then
+        icons = CollectBuffIconCooldownViewerIcons(container)
+    else
+        icons = {}
+        for _, child in ipairs({ container:GetChildren() }) do
+            if IsCooldownIconFrame(child) and child:IsShown() then
                 table.insert(icons, child)
             end
         end
@@ -487,7 +553,7 @@ function IconViewers:ApplyViewerLayout(viewer)
     PrepareIconOrder(name, icons)
 
     local baseIconWidth, baseIconHeight = ComputeIconDimensions(settings)
-    local spacing = ComputeSpacing(settings)
+    local spacing = ComputeSpacing(settings, name)
     local primary, secondary, rowLimit, layoutType = ResolveDirections(name, settings)
     local directionKey = BuildDirectionKey(primary, secondary, rowLimit)
     local rowDimensions = {}
@@ -561,44 +627,48 @@ function IconViewers:RescanViewer(viewer)
     local icons = {}
     local changed = false
     local inCombat = InCombatLockdown()
-    local collectAllIcons = (name == "BuffIconCooldownViewer")
 
-    for _, child in ipairs({ container:GetChildren() }) do
-        if IsCooldownIconFrame(child) then
-            -- Filter out placeholder icons for BuffIconCooldownViewer (those without cooldownID)
-            if name == "BuffIconCooldownViewer" and IsPlaceholderIcon(child) then
-                -- Skip placeholder icons entirely
-            elseif collectAllIcons or child:IsShown() then
+    if name == "BuffIconCooldownViewer" then
+        icons = CollectBuffIconCooldownViewerIconsInternal(container, false)
+    else
+        for _, child in ipairs({ container:GetChildren() }) do
+            if IsCooldownIconFrame(child) and child:IsShown() then
                 table.insert(icons, child)
+            end
+        end
+    end
 
-                if not child.__cdmSkinned and not child.__cdmSkinPending then
-                    child.__cdmSkinPending = true
+    for _, child in ipairs(icons) do
+        if name == "BuffIconCooldownViewer" then
+            HookBuffIconAuraEvents(viewer, child)
+        end
 
-                    if inCombat then
-                        NephUI.__cdmPendingIcons = NephUI.__cdmPendingIcons or {}
-                        NephUI.__cdmPendingIcons[child] = { icon = child, settings = settings, viewer = viewer }
+        if not child.__cdmSkinned and not child.__cdmSkinPending then
+            child.__cdmSkinPending = true
 
-                        if not NephUI.__cdmIconSkinEventFrame then
-                            local eventFrame = CreateFrame("Frame")
-                            eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-                            eventFrame:SetScript("OnEvent", function(self)
-                                self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-                                if IconViewers.ProcessPendingIcons then
-                                    IconViewers:ProcessPendingIcons()
-                                end
-                            end)
-                            NephUI.__cdmIconSkinEventFrame = eventFrame
+            if inCombat then
+                NephUI.__cdmPendingIcons = NephUI.__cdmPendingIcons or {}
+                NephUI.__cdmPendingIcons[child] = { icon = child, settings = settings, viewer = viewer }
+
+                if not NephUI.__cdmIconSkinEventFrame then
+                    local eventFrame = CreateFrame("Frame")
+                    eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+                    eventFrame:SetScript("OnEvent", function(self)
+                        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                        if IconViewers.ProcessPendingIcons then
+                            IconViewers:ProcessPendingIcons()
                         end
-                        NephUI.__cdmIconSkinEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-                    else
-                        local success = pcall(self.SkinIcon, self, child, settings)
-                        if success then
-                            child.__cdmSkinPending = nil
-                        end
-                    end
-                    changed = true
+                    end)
+                    NephUI.__cdmIconSkinEventFrame = eventFrame
+                end
+                NephUI.__cdmIconSkinEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                local success = pcall(self.SkinIcon, self, child, settings)
+                if success then
+                    child.__cdmSkinPending = nil
                 end
             end
+            changed = true
         end
     end
 
@@ -607,7 +677,7 @@ function IconViewers:RescanViewer(viewer)
 
     local shownIcons = icons
     local shownCount = count
-    if collectAllIcons then
+    if name == "BuffIconCooldownViewer" then
         shownIcons = {}
         for _, icon in ipairs(icons) do
             if icon and icon.IsShown and icon:IsShown() then
@@ -626,7 +696,7 @@ function IconViewers:RescanViewer(viewer)
             cacheKey = cacheKey,
             baseIconWidth = baseIconWidth,
             baseIconHeight = baseIconHeight,
-            spacing = ComputeSpacing(settings),
+            spacing = ComputeSpacing(settings, name),
             directions = {ResolveDirections(name, settings)},
             rowDimensions = {}
         }

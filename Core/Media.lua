@@ -3,7 +3,7 @@ local NephUI = ns.Addon
 
 local LSM = LibStub("LibSharedMedia-3.0")
 
-LSM:Register("statusbar","Neph", [[Interface\AddOns\NephUI\Media\Neph]])
+LSM:Register("statusbar","Neph", [[Interface\AddOns\NephUI\Media\Neph.tga]])
 LSM:Register("font","Expressway", [[Interface\AddOns\NephUI\Fonts\Expressway.TTF]])
 
 function NephUI:GetGlobalFont()
@@ -232,6 +232,16 @@ function NephUI:ApplyGlobalFont()
                 if iconFrame._iconKey then
                     return "customIcon:" .. tostring(iconFrame._iconKey)
                 end
+                
+                -- Check if this is an action button (ActionButton, MultiBar, PetActionButton, StanceButton)
+                local buttonName = iconFrame:GetName() or ""
+                if buttonName:match("ActionButton") or buttonName:match("MultiBar") or 
+                   buttonName:match("PetActionButton") or buttonName:match("StanceButton") then
+                    -- Check if NephUI action bars are enabled
+                    if self.db and self.db.profile and self.db.profile.actionBars and self.db.profile.actionBars.enabled then
+                        return "actionButton"
+                    end
+                end
 
                 local viewerFrame = iconFrame:GetParent()
                 if viewerFrame then
@@ -302,6 +312,16 @@ function NephUI:ApplyGlobalFont()
                         end
                 end
             else
+                -- Check if parent is an action button
+                local parentName = parent:GetName() or ""
+                if parentName:match("ActionButton") or parentName:match("MultiBar") or 
+                   parentName:match("PetActionButton") or parentName:match("StanceButton") then
+                    -- Check if NephUI action bars are enabled
+                    if self.db and self.db.profile and self.db.profile.actionBars and self.db.profile.actionBars.enabled then
+                        return "actionButton"
+                    end
+                end
+                
                 local viewerName = parent:GetName()
                 if viewerName then
                     if viewerName == "EssentialCooldownViewer" then
@@ -359,7 +379,15 @@ function NephUI:ApplyGlobalFont()
                 end
             end
             
-            if source == "targetAuras" then
+            if source == "actionButton" then
+                -- Get from action bar settings or fallback to general viewer settings
+                if self.db and self.db.profile and self.db.profile.viewers and self.db.profile.viewers.general then
+                    fontSize = self.db.profile.viewers.general.cooldownFontSize or 18
+                    textColor = self.db.profile.viewers.general.cooldownTextColor or {1, 1, 1, 1}
+                    shadowOffsetX = self.db.profile.viewers.general.cooldownShadowOffsetX or 1
+                    shadowOffsetY = self.db.profile.viewers.general.cooldownShadowOffsetY or -1
+                end
+            elseif source == "targetAuras" then
                 -- Get from target auras settings
                 if self.db and self.db.profile and self.db.profile.unitFrames and 
                    self.db.profile.unitFrames.target and self.db.profile.unitFrames.target.Auras then
@@ -418,16 +446,49 @@ function NephUI:ApplyGlobalFont()
         
         local function ApplyCooldownFont(cooldownFrame)
             if not cooldownFrame then return end
-            
-            -- Skip action button cooldowns to avoid taint
-            local parent = cooldownFrame:GetParent()
-            if parent then
-                local parentName = parent:GetName() or ""
-                -- Check if this is an action button cooldown
-                if parentName:match("ActionButton") or parentName:match("MultiBar") or 
-                   parentName:match("PetActionButton") or parentName:match("StanceButton") then
-                    return
+
+            local function IsGrid2Cooldown(frame)
+                local name = frame:GetName()
+                if name and name:match("^Grid2") then
+                    return true
                 end
+                local parent = frame:GetParent()
+                while parent do
+                    local parentName = parent:GetName()
+                    if parentName and parentName:match("^Grid2") then
+                        return true
+                    end
+                    parent = parent:GetParent()
+                end
+                return false
+            end
+
+            local function IsElvUICooldown(frame)
+                local name = frame:GetName()
+                if name and name:match("^ElvUI") then
+                    return true
+                end
+                local parent = frame:GetParent()
+                while parent do
+                    local parentName = parent:GetName()
+                    if parentName and parentName:match("^ElvUI") then
+                        return true
+                    end
+                    parent = parent:GetParent()
+                end
+                return false
+            end
+
+            -- Skip Grid2/ElvUI cooldowns to avoid overriding their font settings
+            if IsGrid2Cooldown(cooldownFrame) or IsElvUICooldown(cooldownFrame) then
+                return
+            end
+            
+            -- Only apply fonts to NephUI cooldowns
+            local source = IdentifyCooldownSource(cooldownFrame)
+            if not source then
+                -- This cooldown doesn't belong to NephUI, skip it
+                return
             end
             
             local fontString = GetCooldownFontString(cooldownFrame)
@@ -437,8 +498,12 @@ function NephUI:ApplyGlobalFont()
                     if delayedFontString then
                         local currentFontPath = self:GetGlobalFont()
                         if currentFontPath then
-                            local source = IdentifyCooldownSource(cooldownFrame)
-                            local fontSize, textColor, shadowOffsetX, shadowOffsetY = GetCooldownSettings(source)
+                            -- Re-check source in case frame structure changed
+                            local delayedSource = IdentifyCooldownSource(cooldownFrame)
+                            if not delayedSource then
+                                return
+                            end
+                            local fontSize, textColor, shadowOffsetX, shadowOffsetY = GetCooldownSettings(delayedSource)
                             
                             local _, existingSize, flags = delayedFontString:GetFont()
                             if flags then
@@ -457,7 +522,6 @@ function NephUI:ApplyGlobalFont()
             
             local currentFontPath = self:GetGlobalFont()
             if currentFontPath then
-                local source = IdentifyCooldownSource(cooldownFrame)
                 local fontSize, textColor, shadowOffsetX, shadowOffsetY = GetCooldownSettings(source)
                 
                 local _, existingSize, flags = fontString:GetFont()
@@ -514,13 +578,6 @@ function NephUI:ApplyGlobalFont()
         hooksecurefunc("CreateFrame", function(frameType, name, parent, template)
             if frameType == "Cooldown" then
                 C_Timer.After(0, function()
-                    -- Skip action button cooldowns to avoid taint
-                    local frameName = name or ""
-                    if frameName:match("ActionButton") or frameName:match("MultiBar") or 
-                       frameName:match("PetActionButton") or frameName:match("StanceButton") then
-                        return
-                    end
-                    
                     local cooldownFrame = name and _G[name] or nil
                     if not cooldownFrame and parent then
                         local children = {parent:GetChildren()}
@@ -602,6 +659,16 @@ function NephUI:ApplyGlobalFont()
                 local hasCooldownRef = iconFrame.cooldown == cooldownFrame
                 
                 if hasIcon or hasCooldownRef then
+                    -- Check if this is an action button (ActionButton, MultiBar, PetActionButton, StanceButton)
+                    local buttonName = iconFrame:GetName() or ""
+                    if buttonName:match("ActionButton") or buttonName:match("MultiBar") or 
+                       buttonName:match("PetActionButton") or buttonName:match("StanceButton") then
+                        -- Check if NephUI action bars are enabled
+                        if self.db and self.db.profile and self.db.profile.actionBars and self.db.profile.actionBars.enabled then
+                            return "actionButton"
+                        end
+                    end
+                    
                     -- This is likely an icon frame, check its parent
                     local viewerFrame = iconFrame:GetParent()
                     if viewerFrame then
@@ -677,6 +744,16 @@ function NephUI:ApplyGlobalFont()
                         end
                     end
                 else
+                    -- Check if parent is an action button
+                    local parentName = parent:GetName() or ""
+                    if parentName:match("ActionButton") or parentName:match("MultiBar") or 
+                       parentName:match("PetActionButton") or parentName:match("StanceButton") then
+                        -- Check if NephUI action bars are enabled
+                        if self.db and self.db.profile and self.db.profile.actionBars and self.db.profile.actionBars.enabled then
+                            return "actionButton"
+                        end
+                    end
+                    
                     -- Parent might be the viewer frame directly
                     local viewerName = parent:GetName()
                     if viewerName then
@@ -715,7 +792,15 @@ function NephUI:ApplyGlobalFont()
                 local shadowOffsetX = 1
                 local shadowOffsetY = -1
                 
-                if source == "targetAuras" then
+                if source == "actionButton" then
+                    -- Get from action bar settings or fallback to general viewer settings
+                    if self.db and self.db.profile and self.db.profile.viewers and self.db.profile.viewers.general then
+                        fontSize = self.db.profile.viewers.general.cooldownFontSize or 18
+                        textColor = self.db.profile.viewers.general.cooldownTextColor or {1, 1, 1, 1}
+                        shadowOffsetX = self.db.profile.viewers.general.cooldownShadowOffsetX or 1
+                        shadowOffsetY = self.db.profile.viewers.general.cooldownShadowOffsetY or -1
+                    end
+                elseif source == "targetAuras" then
                     -- Get from target auras settings
                     if self.db and self.db.profile and self.db.profile.unitFrames and 
                        self.db.profile.unitFrames.target and self.db.profile.unitFrames.target.Auras then
@@ -774,20 +859,22 @@ function NephUI:ApplyGlobalFont()
                     while frame do
                         if frame:GetObjectType() == "Cooldown" then
                             frame._nephui_fontString = nil -- Clear cache
-                            local fontString = GetCooldownFontString(frame)
-                            if fontString then
-                                -- Identify which viewer/aura this cooldown belongs to
-                                local source = IdentifyCooldownSource(frame)
-                                local fontSize, textColor, shadowOffsetX, shadowOffsetY = GetCooldownSettings(source)
-                                
-                                local _, existingSize, flags = fontString:GetFont()
-                                if flags then
-                                    fontString:SetFont(currentFontPath, fontSize, flags)
-                                else
-                                    fontString:SetFont(currentFontPath, fontSize)
+                            -- Only apply fonts to NephUI cooldowns
+                            local source = IdentifyCooldownSource(frame)
+                            if source then
+                                local fontString = GetCooldownFontString(frame)
+                                if fontString then
+                                    local fontSize, textColor, shadowOffsetX, shadowOffsetY = GetCooldownSettings(source)
+                                    
+                                    local _, existingSize, flags = fontString:GetFont()
+                                    if flags then
+                                        fontString:SetFont(currentFontPath, fontSize, flags)
+                                    else
+                                        fontString:SetFont(currentFontPath, fontSize)
+                                    end
+                                    fontString:SetTextColor(textColor[1], textColor[2], textColor[3], textColor[4] or 1)
+                                    fontString:SetShadowOffset(shadowOffsetX, shadowOffsetY)
                                 end
-                                fontString:SetTextColor(textColor[1], textColor[2], textColor[3], textColor[4] or 1)
-                                fontString:SetShadowOffset(shadowOffsetX, shadowOffsetY)
                             end
                         end
                         frame = EnumerateFrames(frame)

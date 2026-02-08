@@ -9,7 +9,7 @@ if not ResourceBars then
 end
 
 -- Get functions from ResourceDetection
-local GetSecondaryResource = ResourceBars.GetSecondaryResource
+local GetAssignedResources = ResourceBars.GetAssignedResources
 local GetResourceColor = ResourceBars.GetResourceColor
 local GetSecondaryResourceValue = ResourceBars.GetSecondaryResourceValue
 local GetChargedPowerPoints = ResourceBars.GetChargedPowerPoints
@@ -30,7 +30,7 @@ function ResourceBars:GetSecondaryPowerBar()
     local anchor = _G[cfg.attachTo] or UIParent
     local anchorPoint = cfg.anchorPoint or "CENTER"
 
-    local bar = CreateFrame("Frame", ADDON_NAME .. "SecondaryPowerBar", anchor)
+    local bar = CreateFrame("Frame", "NephUI_SecondaryPower", anchor)
     bar:SetFrameStrata("MEDIUM")
     -- Keep the bar click-through so it never blocks PlayerFrame interactions
     bar:EnableMouse(false)
@@ -197,6 +197,23 @@ function ResourceBars:CreateFragmentedPowerBars(bar, resource)
             text:SetJustifyH("CENTER")
             text:SetText("")
             bar.FragmentedPowerBarTexts[i] = text
+        end
+    end
+end
+
+function ResourceBars:ApplyFragmentTextStyleSecondary(bar)
+    local cfg = NephUI.db.profile.secondaryPowerBar
+    local font = NephUI:GetGlobalFont()
+    local size = cfg.runeTimerTextSize or 10
+    local offsetX = cfg.runeTimerTextX or 0
+    local offsetY = cfg.runeTimerTextY or 0
+
+    for _, text in ipairs(bar.FragmentedPowerBarTexts) do
+        if text then
+            text:SetFont(font, size, "OUTLINE")
+            text:SetShadowOffset(0, 0)
+            text:ClearAllPoints()
+            text:SetPoint("CENTER", text:GetParent(), "CENTER", NephUI:Scale(offsetX), NephUI:Scale(offsetY))
         end
     end
 end
@@ -397,8 +414,17 @@ function ResourceBars:UpdateSecondaryPowerBarTicks(bar, resource, max)
         tick:Hide()
     end
 
+    -- Special check for SOUL: only show ticks for Vengeance spec
+    local isTickedResource = tickedPowerTypes[resource]
+    if resource == "SOUL" then
+        local spec = GetSpecialization()
+        local specID = GetSpecializationInfo(spec)
+        -- Only ticked for Vengeance (specID 581)
+        isTickedResource = (specID == 581)
+    end
+
     -- Don't show ticks if disabled or not a ticked power type
-    if not cfg.showTicks or not tickedPowerTypes[resource] then
+    if not cfg.showTicks or not isTickedResource then
         return
     end
 
@@ -462,7 +488,7 @@ function ResourceBars:UpdateSecondaryPowerBar()
     end
 
     -- Track stagger percentage for dynamic color changes
-    local resource = GetSecondaryResource()
+    local resource = select(2, GetAssignedResources())
     if resource == "STAGGER" then
         local stagger = UnitStagger("player") or 0
         local maxHealth = UnitHealthMax("player") or 1
@@ -490,7 +516,7 @@ function ResourceBars:UpdateSecondaryPowerBar()
     end
 
     local bar = self:GetSecondaryPowerBar()
-    local resource = GetSecondaryResource()
+    local resource = select(2, GetAssignedResources())
     
     if not resource then
         bar:Hide()
@@ -616,6 +642,7 @@ function ResourceBars:UpdateSecondaryPowerBar()
         bar.StatusBar:SetValue(current, interpolation)
         
         self:CreateFragmentedPowerBars(bar, resource)
+        self:ApplyFragmentTextStyleSecondary(bar)
         self:UpdateFragmentedPowerDisplay(bar, resource)
         
         -- Update ticks for fragmented resources
@@ -667,6 +694,9 @@ function ResourceBars:UpdateSecondaryPowerBar()
         else -- Default "Current" format
             if valueType == "custom" then
                 bar.TextValue:SetText(displayValue)
+            elseif valueType == "percent" then
+                local formatStr = cfg.showManaPercentDecimal and "%.1f%%" or "%.0f%%"
+                bar.TextValue:SetText(string.format(formatStr, displayValue))
             else
                 bar.TextValue:SetText(AbbreviateNumbers(displayValue))
             end

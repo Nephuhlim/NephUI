@@ -175,12 +175,17 @@ function CastBars:UpdateFocusCastBarLayout()
     local initial = cfg.interruptibleColor or color
     bar.status:SetStatusBarColor(initial[1], initial[2], initial[3], initial[4] or 1)
     
+    local nameOffsetX = cfg.nameOffsetX or 0
+    local nameOffsetY = cfg.nameOffsetY or 0
+    local timeOffsetX = cfg.timeOffsetX or 0
+    local timeOffsetY = cfg.timeOffsetY or 0
+
     -- Text positioning
     bar.spellName:ClearAllPoints()
-    bar.spellName:SetPoint("LEFT", bar.status, "LEFT", NephUI:Scale(4), 0)
+    bar.spellName:SetPoint("LEFT", bar.status, "LEFT", NephUI:Scale(4 + nameOffsetX), NephUI:Scale(nameOffsetY))
     
     bar.timeText:ClearAllPoints()
-    bar.timeText:SetPoint("RIGHT", bar.status, "RIGHT", NephUI:Scale(-4), 0)
+    bar.timeText:SetPoint("RIGHT", bar.status, "RIGHT", NephUI:Scale(-4 + timeOffsetX), NephUI:Scale(timeOffsetY))
     
     -- Update text size
     local font = NephUI:GetGlobalFont()

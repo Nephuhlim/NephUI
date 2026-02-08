@@ -5,7 +5,7 @@ local function CreateMinimapOptions()
     return {
         type = "group",
         name = "Minimap",
-        order = 1,
+        order = 2,
         args = {
             header = {
                 type = "header",
@@ -494,6 +494,64 @@ local function CreateMinimapOptions()
                     end
                 end,
             },
+
+            clockTimeSource = {
+                type = "select",
+                name = "Clock Time Source",
+                desc = "Choose between local time and server time",
+                order = 51.2,
+                width = "full",
+                values = {
+                    server = "Server Time",
+                    ["local"] = "Local Time",
+                },
+                get = function()
+                    if not NephUI.db or not NephUI.db.profile or not NephUI.db.profile.minimap or not NephUI.db.profile.minimap.clock then
+                        return "server"
+                    end
+                    return NephUI.db.profile.minimap.clock.timeSource or "server"
+                end,
+                set = function(_, val)
+                    if not NephUI.db or not NephUI.db.profile then return end
+                    if not NephUI.db.profile.minimap then
+                        NephUI.db.profile.minimap = {}
+                    end
+                    if not NephUI.db.profile.minimap.clock then
+                        NephUI.db.profile.minimap.clock = {}
+                    end
+                    NephUI.db.profile.minimap.clock.timeSource = val
+                    if NephUI.Minimap and NephUI.Minimap.Refresh then
+                        NephUI.Minimap:Refresh()
+                    end
+                end,
+            },
+
+            clockTimeFormat = {
+                type = "toggle",
+                name = "Use 24-Hour Clock",
+                desc = "Toggle between 12-hour and 24-hour time",
+                width = "full",
+                order = 51.3,
+                get = function()
+                    if not NephUI.db or not NephUI.db.profile or not NephUI.db.profile.minimap or not NephUI.db.profile.minimap.clock then
+                        return false
+                    end
+                    return NephUI.db.profile.minimap.clock.useMilitaryTime or false
+                end,
+                set = function(_, val)
+                    if not NephUI.db or not NephUI.db.profile then return end
+                    if not NephUI.db.profile.minimap then
+                        NephUI.db.profile.minimap = {}
+                    end
+                    if not NephUI.db.profile.minimap.clock then
+                        NephUI.db.profile.minimap.clock = {}
+                    end
+                    NephUI.db.profile.minimap.clock.useMilitaryTime = val
+                    if NephUI.Minimap and NephUI.Minimap.Refresh then
+                        NephUI.Minimap:Refresh()
+                    end
+                end,
+            },
             
             clockFontSize = {
                 type = "range",
@@ -557,6 +615,33 @@ local function CreateMinimapOptions()
                         NephUI.db.profile.minimap.clock = {}
                     end
                     NephUI.db.profile.minimap.clock.anchor = val
+                    if NephUI.Minimap and NephUI.Minimap.Refresh then
+                        NephUI.Minimap:Refresh()
+                    end
+                end,
+            },
+
+            clockUseClassColor = {
+                type = "toggle",
+                name = "Use Class Color",
+                desc = "Use your class color for the clock text",
+                width = "full",
+                order = 52.55,
+                get = function()
+                    if not NephUI.db or not NephUI.db.profile or not NephUI.db.profile.minimap or not NephUI.db.profile.minimap.clock then
+                        return false
+                    end
+                    return NephUI.db.profile.minimap.clock.useClassColor or false
+                end,
+                set = function(_, val)
+                    if not NephUI.db or not NephUI.db.profile then return end
+                    if not NephUI.db.profile.minimap then
+                        NephUI.db.profile.minimap = {}
+                    end
+                    if not NephUI.db.profile.minimap.clock then
+                        NephUI.db.profile.minimap.clock = {}
+                    end
+                    NephUI.db.profile.minimap.clock.useClassColor = val
                     if NephUI.Minimap and NephUI.Minimap.Refresh then
                         NephUI.Minimap:Refresh()
                     end
@@ -660,14 +745,14 @@ local function CreateMinimapOptions()
             
             fpsHeader = {
                 type = "header",
-                name = "FPS Tracker",
+                name = "System Data",
                 order = 56,
             },
             
             fpsEnabled = {
                 type = "toggle",
-                name = "Enable FPS Tracker",
-                desc = "Show FPS on the minimap",
+                name = "Enable System Data",
+                desc = "Show system data on the minimap",
                 width = "full",
                 order = 57,
                 get = function()
@@ -693,8 +778,8 @@ local function CreateMinimapOptions()
             
             fpsFontSize = {
                 type = "range",
-                name = "FPS Font Size",
-                desc = "Font size for FPS display",
+                name = "System Data Font Size",
+                desc = "Font size for the system data display",
                 order = 58,
                 width = "full",
                 min = 8,
@@ -723,8 +808,8 @@ local function CreateMinimapOptions()
             
             fpsUpdateFrequency = {
                 type = "range",
-                name = "FPS Update Frequency",
-                desc = "How often to update the FPS display (in seconds)",
+                name = "System Data Update Frequency",
+                desc = "How often to update the system data display (in seconds)",
                 order = 58.1,
                 width = "full",
                 min = 0.1,
@@ -753,8 +838,8 @@ local function CreateMinimapOptions()
             
             fpsAnchor = {
                 type = "select",
-                name = "FPS Anchor",
-                desc = "Anchor position for the FPS display",
+                name = "System Data Anchor",
+                desc = "Anchor position for the system data display",
                 order = 58.5,
                 width = "full",
                 values = {
@@ -788,11 +873,96 @@ local function CreateMinimapOptions()
                     end
                 end,
             },
+
+            fpsUseClassColor = {
+                type = "toggle",
+                name = "Use Class Color",
+                desc = "Use your class color for the system data text",
+                width = "full",
+                order = 58.55,
+                get = function()
+                    if not NephUI.db or not NephUI.db.profile or not NephUI.db.profile.minimap or not NephUI.db.profile.minimap.fps then
+                        return false
+                    end
+                    return NephUI.db.profile.minimap.fps.useClassColor or false
+                end,
+                set = function(_, val)
+                    if not NephUI.db or not NephUI.db.profile then return end
+                    if not NephUI.db.profile.minimap then
+                        NephUI.db.profile.minimap = {}
+                    end
+                    if not NephUI.db.profile.minimap.fps then
+                        NephUI.db.profile.minimap.fps = {}
+                    end
+                    NephUI.db.profile.minimap.fps.useClassColor = val
+                    if NephUI.Minimap and NephUI.Minimap.Refresh then
+                        NephUI.Minimap:Refresh()
+                    end
+                end,
+            },
+
+            fpsShowPing = {
+                type = "toggle",
+                name = "Show Ping",
+                desc = "Show your ping alongside FPS",
+                width = "full",
+                order = 58.56,
+                get = function()
+                    if not NephUI.db or not NephUI.db.profile or not NephUI.db.profile.minimap or not NephUI.db.profile.minimap.fps then
+                        return false
+                    end
+                    return NephUI.db.profile.minimap.fps.showPing or false
+                end,
+                set = function(_, val)
+                    if not NephUI.db or not NephUI.db.profile then return end
+                    if not NephUI.db.profile.minimap then
+                        NephUI.db.profile.minimap = {}
+                    end
+                    if not NephUI.db.profile.minimap.fps then
+                        NephUI.db.profile.minimap.fps = {}
+                    end
+                    NephUI.db.profile.minimap.fps.showPing = val
+                    if NephUI.Minimap and NephUI.Minimap.Refresh then
+                        NephUI.Minimap:Refresh()
+                    end
+                end,
+            },
+
+            fpsPingSource = {
+                type = "select",
+                name = "Ping Source",
+                desc = "Choose which ping value to display",
+                order = 58.57,
+                width = "full",
+                values = {
+                    home = "Home Ping",
+                    world = "World Ping",
+                },
+                get = function()
+                    if not NephUI.db or not NephUI.db.profile or not NephUI.db.profile.minimap or not NephUI.db.profile.minimap.fps then
+                        return "home"
+                    end
+                    return NephUI.db.profile.minimap.fps.pingSource or "home"
+                end,
+                set = function(_, val)
+                    if not NephUI.db or not NephUI.db.profile then return end
+                    if not NephUI.db.profile.minimap then
+                        NephUI.db.profile.minimap = {}
+                    end
+                    if not NephUI.db.profile.minimap.fps then
+                        NephUI.db.profile.minimap.fps = {}
+                    end
+                    NephUI.db.profile.minimap.fps.pingSource = val
+                    if NephUI.Minimap and NephUI.Minimap.Refresh then
+                        NephUI.Minimap:Refresh()
+                    end
+                end,
+            },
             
             fpsColor = {
                 type = "color",
-                name = "FPS Color",
-                desc = "Color for the FPS text",
+                name = "System Data Color",
+                desc = "Color for the system data text",
                 order = 58.6,
                 width = "full",
                 hasAlpha = true,
@@ -820,8 +990,8 @@ local function CreateMinimapOptions()
             
             fpsOffsetX = {
                 type = "range",
-                name = "FPS X Offset",
-                desc = "Horizontal offset for the FPS display",
+                name = "System Data X Offset",
+                desc = "Horizontal offset for the system data display",
                 order = 58.7,
                 width = "full",
                 min = -200,
@@ -850,8 +1020,8 @@ local function CreateMinimapOptions()
             
             fpsOffsetY = {
                 type = "range",
-                name = "FPS Y Offset",
-                desc = "Vertical offset for the FPS display",
+                name = "System Data Y Offset",
+                desc = "Vertical offset for the system data display",
                 order = 58.8,
                 width = "full",
                 min = -200,

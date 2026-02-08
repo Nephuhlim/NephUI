@@ -754,6 +754,37 @@ local function CreateViewerOptions(viewerKey, displayName, order)
         },
     }
     
+    -- Add cooldown swipe alpha option for cooldown viewers
+    if viewerKey == "EssentialCooldownViewer" or viewerKey == "UtilityCooldownViewer" or viewerKey == "BuffIconCooldownViewer" then
+        ret.args.cooldownSwipeAlpha = {
+            type = "range",
+            name = "Cooldown Swipe Alpha",
+            desc = "Alpha (transparency) of the cooldown swipe overlay. Does not affect duration text.",
+            order = 46,
+            width = "full",
+            min = 0, max = 1, step = 0.05,
+            get = function()
+                return NephUI.db.profile.viewers[viewerKey].cooldownSwipeAlpha or 0.8
+            end,
+            set = function(_, val)
+                if not NephUI.db.profile.viewers[viewerKey] then
+                    NephUI.db.profile.viewers[viewerKey] = {}
+                end
+                NephUI.db.profile.viewers[viewerKey].cooldownSwipeAlpha = val
+                -- Re-skin all icons in this viewer to apply the new swipe alpha
+                local viewer = _G[viewerKey]
+                if viewer and NephUI.IconViewers then
+                    if NephUI.IconViewers.SkinAllIconsInViewer then
+                        NephUI.IconViewers:SkinAllIconsInViewer(viewer)
+                    end
+                end
+                if NephUI.RefreshViewers then
+                    NephUI:RefreshViewers()
+                end
+            end,
+        }
+    end
+    
     -- Add keybind and ignoreAuraOverride options at the top only for Essential and Utility viewers
     if viewerKey == "EssentialCooldownViewer" or viewerKey == "UtilityCooldownViewer" then
         local viewerSettingName = (viewerKey == "EssentialCooldownViewer") and "Essential" or "Utility"
@@ -772,6 +803,11 @@ local function CreateViewerOptions(viewerKey, displayName, order)
                 NephUI.db.profile["cooldownManager_showKeybinds_" .. viewerSettingName] = val
                 if NephUI.Keybinds then
                     NephUI.Keybinds:OnSettingChanged(viewerSettingName)
+                end
+                -- Refresh GUI to show/hide keybind settings
+                local configFrame = _G["NephUI_ConfigFrame"]
+                if configFrame and configFrame:IsShown() and configFrame.FullRefresh then
+                    configFrame:FullRefresh()
                 end
             end,
         }

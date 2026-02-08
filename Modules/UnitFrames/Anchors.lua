@@ -90,20 +90,6 @@ function UF:HideDefaultUnitFrames()
         end)
     end
     
-    local soulBar = _G["DemonHunterSoulFragmentsBar"]
-    if soulBar then
-        soulBar:SetScript("OnShow", nil)
-        soulBar:SetScript("OnHide", nil)
-        soulBar:SetParent(UIParent)
-        soulBar:Show()
-        soulBar:SetAlpha(0)
-        soulBar:SetScript("OnHide", function(self)
-            if not InCombatLockdown() then
-                self:Show()
-                self:SetAlpha(0)
-            end
-        end)
-    end
 end
 
 function UF:ApplyFramePosition(unitFrame, unit, DB)

@@ -4,12 +4,12 @@ local NephUI = ns.Addon
 local function CreateCustomIconOptions()
     return {
         type = "group",
-        name = "Dynamic Icons",
-        order = 6,
+        name = "Custom Spells",
+        order = 8,
         args = {
             header = {
                 type = "header",
-                name = "Dynamic Icons",
+                name = "Custom Spells",
                 order = 1,
             },
             description = {
@@ -17,9 +17,9 @@ local function CreateCustomIconOptions()
                 name = "Build custom spell, item, and equipment-slot trackers. Use the UI below to add icons, configure visuals, and organize groups.",
                 order = 2,
             },
-            dynamicUI = {
+            customSpellsUI = {
                 type = "dynamicIcons",
-                name = "Dynamic Icons",
+                name = "Custom Spells",
                 order = 3,
             },
         },

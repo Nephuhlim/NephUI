@@ -5,7 +5,7 @@ local function CreateChatOptions()
     return {
         type = "group",
         name = "Chat",
-        order = 2,
+        order = 3,
         args = {
             header = {
                 type = "header",

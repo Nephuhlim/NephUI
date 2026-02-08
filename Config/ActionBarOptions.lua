@@ -6,7 +6,7 @@ local function CreateActionBarOptions()
     return {
         type = "group",
         name = "Action Bars",
-        order = 4,
+        order = 10,
         childGroups = "tab",
         args = {
             general = {

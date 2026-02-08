@@ -1,8 +1,3 @@
---[[
-	Pixel-perfect scaling and snapping for UI elements.
-	Uses a 768px reference height; scales and rounds values so they align to whole pixels.
-]]
-
 local ADDON_NAME, ns = ...
 local NephUI = ns.Addon
 
@@ -45,14 +40,18 @@ local function effectiveWidthUltrawide(physW, physH, enabled)
 	return nil
 end
 
+-- Refresh Blizzard global FX model scenes (Retail) so they respect scale/resolution changes.
 function NephUI:RefreshGlobalFX()
-	local g = _G
-	g.GlobalFXDialogModelScene:Hide()
-	g.GlobalFXDialogModelScene:Show()
-	g.GlobalFXMediumModelScene:Hide()
-	g.GlobalFXMediumModelScene:Show()
-	g.GlobalFXBackgroundModelScene:Hide()
-	g.GlobalFXBackgroundModelScene:Show()
+	local GLOBAL_FX_SCENES = {
+		"GlobalFXDialogModelScene", "GlobalFXMediumModelScene", "GlobalFXBackgroundModelScene",
+	}
+	for _, name in ipairs(GLOBAL_FX_SCENES) do
+		local scene = _G[name]
+		if scene and scene.Hide and scene.Show then
+			scene:Hide()
+			scene:Show()
+		end
+	end
 end
 
 function NephUI:IsEyefinity(width, height)

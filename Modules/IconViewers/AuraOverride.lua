@@ -156,7 +156,8 @@ local function HookCooldownFrame(iconFrame, viewerName)
                 else
                     -- NORMAL SPELL: Use regular spell cooldown
                     local ok, cooldownInfo = pcall(C_Spell.GetSpellCooldown, spellID)
-                    if ok and cooldownInfo and cooldownInfo.duration and cooldownInfo.startTime then
+                    if ok and cooldownInfo and cooldownInfo.duration and cooldownInfo.startTime 
+                       and type(cooldownInfo.duration) == "number" and type(cooldownInfo.startTime) == "number" then
                         -- Use spell cooldown instead of aura duration
                         parentFrame.__nephuiBypassCooldownHook = true
                         self:SetCooldown(cooldownInfo.startTime, cooldownInfo.duration)
@@ -221,7 +222,8 @@ local function HookCooldownFrame(iconFrame, viewerName)
                     else
                         -- NORMAL SPELL: Use regular spell cooldown
                         local ok, cooldownInfo = pcall(C_Spell.GetSpellCooldown, spellID)
-                        if ok and cooldownInfo and cooldownInfo.duration and cooldownInfo.startTime then
+                        if ok and cooldownInfo and cooldownInfo.duration and cooldownInfo.startTime 
+                           and type(cooldownInfo.duration) == "number" and type(cooldownInfo.startTime) == "number" then
                             -- Use spell cooldown instead of aura duration
                             parentFrame.__nephuiBypassCooldownHook = true
                             self:SetCooldown(cooldownInfo.startTime, cooldownInfo.duration)
@@ -300,7 +302,8 @@ function AuraOverride:RefreshViewer(viewer)
                     else
                         -- NORMAL SPELL: Use regular spell cooldown
                         local ok, cooldownInfo = pcall(C_Spell.GetSpellCooldown, spellID)
-                        if ok and cooldownInfo and cooldownInfo.duration and cooldownInfo.startTime then
+                        if ok and cooldownInfo and cooldownInfo.duration and cooldownInfo.startTime 
+                           and type(cooldownInfo.duration) == "number" and type(cooldownInfo.startTime) == "number" then
                             icon.Cooldown:SetCooldown(cooldownInfo.startTime, cooldownInfo.duration)
                             -- Set swipe color to black (like regular cooldown) instead of yellow (aura swipe)
                             if icon.Cooldown.SetSwipeColor then

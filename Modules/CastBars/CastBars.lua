@@ -804,7 +804,7 @@ function CastBars:ShowTestCastBar()
         bar.timeText:SetShadowOffset(0, 0)
     end
     
-    bar:SetScript("OnUpdate", CastBar_OnUpdate)
+    bar:SetScript("OnUpdate", CastBars.CastBar_OnUpdate)
     bar:Show()
 end
 
@@ -839,7 +839,7 @@ function CastBars:ShowTestTargetCastBar()
         bar.timeText:SetShadowOffset(0, 0)
     end
     
-    bar:SetScript("OnUpdate", CastBar_OnUpdate)
+    bar:SetScript("OnUpdate", CastBars.CastBar_OnUpdate)
     bar:Show()
 end
 
